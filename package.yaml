@@ -1,0 +1,74 @@
+name:                hanabi
+version:             0.1.0.0
+github:              "lehmacdj/hanabi"
+license:             BSD3
+author:              "Devin Lehmacher"
+maintainer:          "lehmacdj@gmail.com"
+copyright:           "Copyright: (c) 2017 Devin Lehmacher"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Miscellaneous
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/lehmacdj/hanabi#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- classy-prelude
+- lens
+- refined
+- generic-lens
+
+default-extensions:
+- ConstraintKinds
+- DataKinds
+- DeriveGeneric
+- DuplicateRecordFields
+- FlexibleContexts
+- GADTs
+- GeneralizedNewtypeDeriving
+- LambdaCase
+- NoImplicitPrelude
+- NoMonomorphismRestriction
+- OverloadedLabels
+- RankNTypes
+- ScopedTypeVariables
+- StandaloneDeriving
+- TypeApplications
+- TypeFamilies
+- TypeOperators
+
+ghc-options:
+- -Wall
+
+library:
+  source-dirs: src
+
+executables:
+  hanabi-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hanabi
+
+tests:
+  hanabi-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - hanabi
