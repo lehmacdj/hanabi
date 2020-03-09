@@ -60,6 +60,9 @@ injectCardNumber :: CardNumber -> FireworkNumber
 injectCardNumber =
     FireworkNumber . Unsafe.reallyUnsafeRefine . unrefine . unCardNumber
 
+fn0 :: FireworkNumber
+fn0 = FireworkNumber $$(refineTH 0)
+
 data Color = Red | Blue | Green | Yellow | White
     deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
@@ -74,7 +77,7 @@ newtype Fireworks = Fireworks { underlyingMap :: Map Color FireworkNumber }
 
 numberFor :: Color -> Lens' Fireworks FireworkNumber
 numberFor c = lens getter (flip setter') where
-    getter = fromMaybe (FireworkNumber $$(refineTH 0)) . view (#underlyingMap . at c)
+    getter = fromMaybe fn0 . view (#underlyingMap . at c)
     setter' n = #underlyingMap . at c ?~ n
 
 -- | the board is the state shared between all players
