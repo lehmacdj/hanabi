@@ -85,17 +85,21 @@ data Board = Board
     { fireworks :: Fireworks
     , time :: Time
     , fuse :: Fuse
+    , discarded :: Set Card
     }
     deriving (Show, Generic)
 
 -- | Either update the state (i.e. increase fuse/correct number) or
 -- return Nothing if the game is over
-playToBoard :: Card -> Board -> Maybe Board
-playToBoard c b = (<|> overM #fuse bumpFuse b) $ do
+playB :: Card -> Board -> Maybe Board
+playB c b = (<|> overM #fuse bumpFuse b) $ do
     let fireworkNumber = view (#fireworks . numberFor (view #color c)) b
     newFireworkNumber <- bumpFireworkNumber fireworkNumber
     guard (newFireworkNumber == injectCardNumber (view #number c))
     pure (set (#fireworks . numberFor (view #color c)) newFireworkNumber b)
+
+discardB :: Card -> Board -> Board
+discardB c = (#discarded <>~ singleton c) . over #time addTime
 
 someFunc :: IO ()
 someFunc = pure ()
