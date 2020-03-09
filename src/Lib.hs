@@ -82,17 +82,21 @@ data Board = Board
     }
     deriving (Show, Generic)
 
+-- | add a given card to the discard pile
+discardCard :: Card -> Board -> Board
+discardCard c = #discarded <>~ singleton c
+
 -- | Either update the state (i.e. increase fuse/correct number) or
 -- return Nothing if the game is over
 playB :: Card -> Board -> Maybe Board
-playB c b = (<|> overM #fuse bumpFuse b) $ do
+playB c b = (<|> overM #fuse bumpFuse (discardCard c b)) $ do
     let fireworkNumber = view (#fireworks . numberFor (view #color c)) b
     newFireworkNumber <- bumpFireworkNumber fireworkNumber
     guard (newFireworkNumber == injectCardNumber (view #number c))
     pure (set (#fireworks . numberFor (view #color c)) newFireworkNumber b)
 
 discardB :: Card -> Board -> Board
-discardB c = (#discarded <>~ singleton c) . over #time addTime
+discardB c = discardCard c . over #time addTime
 
 type Deck = [Card]
 
@@ -105,30 +109,36 @@ c2 = $$(refineTH 2)
 c3 = $$(refineTH 3)
 c4 = $$(refineTH 4)
 
-newtype Hand = Hand { underlyingMap :: CardIx -> Card }
-    deriving (Generic)
-instance Show Hand where
-    -- | show (Hand (const c)) == "[c, c, c, c, c]"
-    show hs = squared . intercalate ", " . map showCard $ [c0,c1,c2,c3,c4] where
-        showCard = show . view #underlyingMap hs
-        squared s = "[" ++ s ++ "]"
+-- | invariant: Map is total, every entry has a value
+-- makeHand checks this invariant use it over the Hand constructor
+newtype Hand = Hand { underlyingMap :: Map CardIx Card }
+    deriving (Generic, Show)
 
-getCard :: CardIx -> Hand
-getCard = flip (view #underlyingMap)
+makeHand :: (CardIx -> Card) -> Hand
+makeHand = Hand . mapOfFunction [c0, c1, c2, c3, c4]
+
+cardFor :: CardIx -> Lens' Hand Card
+cardFor cix = lens getter (flip setter') where
+    err = error "invariant violated: cardFor lens getter"
+    getter = fromMaybe err . view (#underlyingMap . at cix)
+    setter' c = #underlyingMap . at cix ?~ c
 
 data Player = P0 | P1 | P2
     deriving (Show, Generic, Eq, Ord, Enum, Bounded)
 
-newtype Hands = Hands { underlyingMap :: Player -> Hand }
-    deriving (Generic)
-instance Show Hands where
-    -- | show (Hands (const [])) == "{P0 -> [], P1 -> [], P2 -> []}"
-    show hs = bracketed . intercalate ", " . map showHand $ [P0 .. P2] where
-        showHand p = show p ++ " -> " ++ show (view #underlyingMap hs p)
-        bracketed s = "{" ++ s ++ "}"
+-- | invariant: Map is total, every entry has a value
+-- makeHands checks this invariant; use it over the Hands construtor
+newtype Hands = Hands { underlyingMap :: Map Player Hand }
+    deriving (Generic, Show)
 
-getHand :: Player -> Hands -> Hand
-getHand = flip (view #underlyingMap)
+makeHands :: (Player -> Hand) -> Hands
+makeHands = Hands . mapOfFunction [P0 .. P2]
+
+handFor :: Player -> Lens' Hands Hand
+handFor p = lens getter (flip setter') where
+    err = error "invariant violated: handFor lens getter"
+    getter = fromMaybe err . view (#underlyingMap . at p)
+    setter' h = #underlyingMap . at p ?~ h
 
 -- | a god's eye view of the state of the game, used for the core game loop,
 -- judging the actions of the players
@@ -138,6 +148,32 @@ data State = State
     , hands :: Hands
     }
     deriving (Show, Generic)
+
+-- TODO: figure out what to do when hand is missing a card at the end of the game
+-- requires rethinking totality of hand slightly
+-- will require updates to Hand, takeCard, play, discard potentially
+-- right now behavior is to return nothing when there isn't a card to draw
+-- which according to semantics should mean that the game is over
+
+-- | take a card out of a players hand, replacing that card with a new card
+-- from the deck. returns Nothing if there are no cards left in the deck
+takeCard :: Player -> CardIx -> State -> Maybe (Card, State)
+takeCard p cix s = do
+    let card = view (#hands . handFor p . cardFor cix) s
+    nextCard <- s ^? #deck . element 0
+    let updateCard = #hands . handFor p . cardFor cix .~ nextCard
+    let updateDeck = #deck .~ drop 1 (view #deck s)
+    pure (card, updateCard . updateDeck $ s)
+
+play :: Player -> CardIx -> State -> Maybe State
+play p cix s = do
+    (c, s') <- takeCard p cix s
+    overM #board (playB c) s'
+
+discard :: Player -> CardIx -> State -> Maybe State
+discard p cix s = do
+    (c, s') <- takeCard p cix s
+    pure $ over #board (discardB c) s'
 
 someFunc :: IO ()
 someFunc = pure ()

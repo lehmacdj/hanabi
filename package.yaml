@@ -25,6 +25,7 @@ dependencies:
 - lens
 - refined
 - generic-lens
+- containers
 
 default-extensions:
 - ConstraintKinds
