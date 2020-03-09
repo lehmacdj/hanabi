@@ -11,57 +11,50 @@ import Data.Generics.Labels ()
 
 -- | amount of time available to the players
 type IsTime = And (From 0) (To 8)
-newtype Time = Time { unTime :: Refined IsTime Int }
-    deriving (Show, Eq, Ord, Generic)
+type Time = Refined IsTime Int
 
 maxTime :: Time
-maxTime = Time $$(refineTH 8)
+maxTime = $$(refineTH 8)
 
 -- | increase time by 1 step
 addTime :: Time -> Time
-addTime = maybe maxTime Time . refineThrow . succ . unrefine . unTime
+addTime = fromMaybe maxTime . refineThrow . succ . unrefine
 
 -- | decrease time by 1 step, returning nothing if that is impossible
 loseTime :: Time -> Maybe Time
-loseTime = fmap Time . refineThrow . pred . unrefine . unTime
+loseTime = refineThrow . pred . unrefine
 
 -- | the number of times the players have played a card incorrectly
 type IsFuse = And (From 0) (To 2)
-newtype Fuse = Fuse { unFuse :: Refined IsFuse Int }
-    deriving (Show, Eq, Ord, Generic)
+type Fuse = Refined IsFuse Int
 
 fuseStart :: Fuse
-fuseStart = Fuse $$(refineTH 0)
+fuseStart = $$(refineTH 0)
 
 -- | try to increase the fuse by one, if the players loose because of this
 -- return nothing
 bumpFuse :: Fuse -> Maybe Fuse
-bumpFuse = fmap Fuse . refineThrow . succ . unrefine . unFuse
+bumpFuse = refineThrow . succ . unrefine
 
 type IsCardNumber = And (From 1) (To 5)
-newtype CardNumber = CardNumber { unCardNumber :: Refined IsCardNumber Int }
-    deriving (Show, Eq, Ord, Generic)
+type CardNumber = Refined IsCardNumber Int
 
 -- | increase number by 1 failing if that is impossible
 bumpCardNumber :: CardNumber -> Maybe CardNumber
-bumpCardNumber = fmap CardNumber . refineThrow . succ . unrefine . unCardNumber
+bumpCardNumber = refineThrow . succ . unrefine
 
 type IsFireworkNumber = And (From 0) (To 5)
-newtype FireworkNumber = FireworkNumber
-    { unFireworkNumber :: Refined IsFireworkNumber Int }
-    deriving (Show, Eq, Ord, Generic)
+type FireworkNumber = Refined IsFireworkNumber Int
 
 -- | increase number by 1 failing if that is impossible
 bumpFireworkNumber :: FireworkNumber -> Maybe FireworkNumber
-bumpFireworkNumber =
-    fmap FireworkNumber . refineThrow . succ . unrefine . unFireworkNumber
+bumpFireworkNumber = refineThrow . succ . unrefine
 
 injectCardNumber :: CardNumber -> FireworkNumber
-injectCardNumber =
-    FireworkNumber . Unsafe.reallyUnsafeRefine . unrefine . unCardNumber
+injectCardNumber = Unsafe.reallyUnsafeRefine . unrefine
 
 fn0 :: FireworkNumber
-fn0 = FireworkNumber $$(refineTH 0)
+fn0 = $$(refineTH 0)
 
 data Color = Red | Blue | Green | Yellow | White
     deriving (Show, Eq, Ord, Enum, Bounded, Generic)
@@ -100,6 +93,51 @@ playB c b = (<|> overM #fuse bumpFuse b) $ do
 
 discardB :: Card -> Board -> Board
 discardB c = (#discarded <>~ singleton c) . over #time addTime
+
+type Deck = [Card]
+
+type IsCardIx = And (From 0) (To 4)
+type CardIx = Refined IsCardIx Int
+c0, c1, c2, c3, c4 :: CardIx
+c0 = $$(refineTH 0)
+c1 = $$(refineTH 1)
+c2 = $$(refineTH 2)
+c3 = $$(refineTH 3)
+c4 = $$(refineTH 4)
+
+newtype Hand = Hand { underlyingMap :: CardIx -> Card }
+    deriving (Generic)
+instance Show Hand where
+    -- | show (Hand (const c)) == "[c, c, c, c, c]"
+    show hs = squared . intercalate ", " . map showCard $ [c0,c1,c2,c3,c4] where
+        showCard = show . view #underlyingMap hs
+        squared s = "[" ++ s ++ "]"
+
+getCard :: CardIx -> Hand
+getCard = flip (view #underlyingMap)
+
+data Player = P0 | P1 | P2
+    deriving (Show, Generic, Eq, Ord, Enum, Bounded)
+
+newtype Hands = Hands { underlyingMap :: Player -> Hand }
+    deriving (Generic)
+instance Show Hands where
+    -- | show (Hands (const [])) == "{P0 -> [], P1 -> [], P2 -> []}"
+    show hs = bracketed . intercalate ", " . map showHand $ [P0 .. P2] where
+        showHand p = show p ++ " -> " ++ show (view #underlyingMap hs p)
+        bracketed s = "{" ++ s ++ "}"
+
+getHand :: Player -> Hands -> Hand
+getHand = flip (view #underlyingMap)
+
+-- | a god's eye view of the state of the game, used for the core game loop,
+-- judging the actions of the players
+data State = State
+    { board :: Board
+    , deck :: Deck
+    , hands :: Hands
+    }
+    deriving (Show, Generic)
 
 someFunc :: IO ()
 someFunc = pure ()
