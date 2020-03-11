@@ -109,19 +109,11 @@ c2 = $$(refineTH 2)
 c3 = $$(refineTH 3)
 c4 = $$(refineTH 4)
 
--- | invariant: Map is total, every entry has a value
--- makeHand checks this invariant use it over the Hand constructor
-newtype Hand = Hand { underlyingMap :: Map CardIx Card }
-    deriving (Generic, Show)
+type Hand = [Card]
 
-makeHand :: (CardIx -> Card) -> Hand
-makeHand = Hand . mapOfFunction [c0, c1, c2, c3, c4]
-
-cardFor :: CardIx -> Lens' Hand Card
-cardFor cix = lens getter (flip setter') where
-    err = error "invariant violated: cardFor lens getter"
-    getter = fromMaybe err . view (#underlyingMap . at cix)
-    setter' c = #underlyingMap . at cix ?~ c
+-- returns an affine traversal (one returning 0 or 1 entries only)
+cardFor :: CardIx -> Traversal' Hand Card
+cardFor = element . unrefine
 
 data Player = P0 | P1 | P2
     deriving (Show, Generic, Eq, Ord, Enum, Bounded)
@@ -132,7 +124,7 @@ newtype Hands = Hands { underlyingMap :: Map Player Hand }
     deriving (Generic, Show)
 
 makeHands :: (Player -> Hand) -> Hands
-makeHands = Hands . mapOfFunction [P0 .. P2]
+makeHands = Hands . mapOfFunction [P0, P1, P2]
 
 handFor :: Player -> Lens' Hands Hand
 handFor p = lens getter (flip setter') where
@@ -149,17 +141,13 @@ data State = State
     }
     deriving (Show, Generic)
 
--- TODO: figure out what to do when hand is missing a card at the end of the game
--- requires rethinking totality of hand slightly
--- will require updates to Hand, takeCard, play, discard potentially
--- right now behavior is to return nothing when there isn't a card to draw
--- which according to semantics should mean that the game is over
-
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
 takeCard :: Player -> CardIx -> State -> Maybe (Card, State)
 takeCard p cix s = do
-    let card = view (#hands . handFor p . cardFor cix) s
+    -- TODO: use effects from polysemy so that I can signal different error
+    -- conditions effectively
+    card <- s ^? #hands . handFor p . cardFor cix
     nextCard <- s ^? #deck . element 0
     let updateCard = #hands . handFor p . cardFor cix .~ nextCard
     let updateDeck = #deck .~ drop 1 (view #deck s)
