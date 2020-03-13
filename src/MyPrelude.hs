@@ -3,7 +3,6 @@ module MyPrelude
     , module Control.Lens
     , module Polysemy
 
-    , overM
     , mapOfFunction
     , Throws
     , justOrThrow
@@ -34,10 +33,6 @@ justOrThrow :: Throws '[err] r => err -> Maybe a -> Sem r a
 justOrThrow err = \case
     Just x -> pure x
     Nothing -> throw err
-
--- | mapM but for an arbitrary lens not for monads
-overM :: forall m s t a b. Monad m => ALens s t a b -> (a -> m b) -> s -> m t
-overM l f d = f (d ^# l) >>= \x -> pure (storing l x d)
 
 mapOfFunction :: Ord k => [k] -> (k -> v) -> Map k v
 mapOfFunction ks f = Map.fromList (ks `zip` map f ks)

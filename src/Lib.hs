@@ -89,7 +89,7 @@ discardCard c = #discarded <>~ singleton c
 -- | Either update the state (i.e. increase fuse/correct number) or
 -- return Nothing if the game is over
 playB :: Card -> Board -> Maybe Board
-playB c b = (<|> overM #fuse bumpFuse (discardCard c b)) $ do
+playB c b = (<|> mapMOf #fuse bumpFuse (discardCard c b)) $ do
     let fireworkNumber = view (#fireworks . numberFor (view #color c)) b
     newFireworkNumber <- bumpFireworkNumber fireworkNumber
     guard (newFireworkNumber == injectCardNumber (view #number c))
@@ -168,7 +168,7 @@ play
     => Player -> CardIx -> State -> Sem r State
 play p cix s = do
     (c, s') <- takeCard p cix s
-    justOrThrow GameOver $ overM #board (playB c) s'
+    justOrThrow GameOver $ mapMOf #board (playB c) s'
 
 discard
     :: Throws [CardDoesNotExist, GameOver] r
