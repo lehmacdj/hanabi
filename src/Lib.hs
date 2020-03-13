@@ -157,9 +157,9 @@ takeCard p cix s = do
       updateDeck = #deck .~ drop 1 (view #deck s)
       updateHand
         = case s ^? #deck . element 0 of
-            Nothing -> over (#hands . handFor p) (deleteAt (unrefine cix))
-            -- ^ this is gross and should be cleaner, could be more typesafe
+            -- this is gross and should be cleaner, could be more typesafe
             -- if I was smarter
+            Nothing -> over (#hands . handFor p) (deleteAt (unrefine cix))
             Just nextCard -> #hands . handFor p . cardFor cix .~ nextCard
     pure (card, updateHand . updateDeck $ s)
 
