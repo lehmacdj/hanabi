@@ -141,24 +141,38 @@ data State = State
     }
     deriving (Show, Generic)
 
+data CardDoesNotExist = CardDoesNotExist
+    deriving (Show)
+data GameOver = GameOver
+    deriving (Show)
+
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
-takeCard :: Player -> CardIx -> State -> Maybe (Card, State)
+takeCard
+    :: Throws '[CardDoesNotExist] r
+    => Player -> CardIx -> State -> Sem r (Card, State)
 takeCard p cix s = do
-    -- TODO: use effects from polysemy so that I can signal different error
-    -- conditions effectively
-    card <- s ^? #hands . handFor p . cardFor cix
-    nextCard <- s ^? #deck . element 0
-    let updateCard = #hands . handFor p . cardFor cix .~ nextCard
-    let updateDeck = #deck .~ drop 1 (view #deck s)
-    pure (card, updateCard . updateDeck $ s)
+    card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
+    let
+      updateDeck = #deck .~ drop 1 (view #deck s)
+      updateHand
+        = case s ^? #deck . element 0 of
+            Nothing -> over (#hands . handFor p) (deleteAt (unrefine cix))
+            -- ^ this is gross and should be cleaner, could be more typesafe
+            -- if I was smarter
+            Just nextCard -> #hands . handFor p . cardFor cix .~ nextCard
+    pure (card, updateHand . updateDeck $ s)
 
-play :: Player -> CardIx -> State -> Maybe State
+play
+    :: Throws [CardDoesNotExist, GameOver] r
+    => Player -> CardIx -> State -> Sem r State
 play p cix s = do
     (c, s') <- takeCard p cix s
-    overM #board (playB c) s'
+    justOrThrow GameOver $ overM #board (playB c) s'
 
-discard :: Player -> CardIx -> State -> Maybe State
+discard
+    :: Throws [CardDoesNotExist, GameOver] r
+    => Player -> CardIx -> State -> Sem r State
 discard p cix s = do
     (c, s') <- takeCard p cix s
     pure $ over #board (discardB c) s'

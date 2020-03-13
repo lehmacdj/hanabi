@@ -27,7 +27,7 @@ dependencies:
 - generic-lens
 - containers
 - polysemy
-# - polysemy-plugin
+- polysemy-plugin
 
 default-extensions:
 - ConstraintKinds
@@ -41,6 +41,7 @@ default-extensions:
 - NoImplicitPrelude
 - NoMonomorphismRestriction
 - OverloadedLabels
+- PolyKinds
 - RankNTypes
 - ScopedTypeVariables
 - StandaloneDeriving
@@ -50,7 +51,7 @@ default-extensions:
 
 ghc-options:
 - -Wall
-# - -fplugin=Polysemy.Plugin
+- -fplugin=Polysemy.Plugin
 
 library:
   source-dirs: src
