@@ -120,17 +120,19 @@ data Player = P0 | P1 | P2
 
 -- | invariant: Map is total, every entry has a value
 -- makeHands checks this invariant; use it over the Hands construtor
-newtype Hands = Hands { underlyingMap :: Map Player Hand }
+newtype PlayerMap h = PlayerMap { underlyingMap :: Map Player h }
     deriving (Generic, Show)
 
-makeHands :: (Player -> Hand) -> Hands
+makeHands :: (Player -> h) -> PlayerMap h
 makeHands = Hands . mapOfFunction [P0, P1, P2]
 
-handFor :: Player -> Lens' Hands Hand
+handFor :: Player -> Lens (PlayerMap h) (PlayerMap h') h h'
 handFor p = lens getter (flip setter') where
     err = error "invariant violated: handFor lens getter"
     getter = fromMaybe err . view (#underlyingMap . at p)
     setter' h = #underlyingMap . at p ?~ h
+
+type Hands = PlayerMap Hand
 
 -- | a god's eye view of the state of the game, used for the core game loop,
 -- judging the actions of the players
@@ -176,6 +178,26 @@ discard
 discard p cix s = do
     (c, s') <- takeCard p cix s
     pure $ over #board (discardB c) s'
+
+-- | the possibilities  of what a card can be in a players hand
+data CardPossibilities = CardPossibilities
+    { numbers :: [CardNumber]
+    , colors :: [Color]
+    }
+    deriving (Show, Eq)
+
+type HandPossibilities = [CardPossibilities]
+
+type HandsInformation = PlayerMap HandPossibilities
+
+-- | the information that a player can have about the game
+data PlayerInformation = PlayerInformation
+    { player :: Player
+    , board :: Board
+    , cardsInDeck
+    , HandPossibilities ::
+    ,
+    ,
 
 someFunc :: IO ()
 someFunc = pure ()
