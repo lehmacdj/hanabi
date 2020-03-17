@@ -36,12 +36,12 @@ fuseStart = $$(refineTH 0)
 bumpFuse :: Fuse -> Maybe Fuse
 bumpFuse = refineThrow . succ . unrefine
 
-type IsCardNumber = And (From 1) (To 5)
-type CardNumber = Refined IsCardNumber Int
+type IsNumber = And (From 1) (To 5)
+type Number = Refined IsNumber Int
 
 -- | increase number by 1 failing if that is impossible
-bumpCardNumber :: CardNumber -> Maybe CardNumber
-bumpCardNumber = refineThrow . succ . unrefine
+bumpNumber :: Number -> Maybe Number
+bumpNumber = refineThrow . succ . unrefine
 
 type IsFireworkNumber = And (From 0) (To 5)
 type FireworkNumber = Refined IsFireworkNumber Int
@@ -50,8 +50,8 @@ type FireworkNumber = Refined IsFireworkNumber Int
 bumpFireworkNumber :: FireworkNumber -> Maybe FireworkNumber
 bumpFireworkNumber = refineThrow . succ . unrefine
 
-injectCardNumber :: CardNumber -> FireworkNumber
-injectCardNumber = Unsafe.reallyUnsafeRefine . unrefine
+injectNumber :: Number -> FireworkNumber
+injectNumber = Unsafe.reallyUnsafeRefine . unrefine
 
 fn0 :: FireworkNumber
 fn0 = $$(refineTH 0)
@@ -61,7 +61,7 @@ data Color = Red | Blue | Green | Yellow | White
 
 data Card = Card
     { color :: Color
-    , number :: CardNumber
+    , number :: Number
     }
     deriving (Show, Eq, Ord, Generic)
 
@@ -92,7 +92,7 @@ playB :: Card -> Board -> Maybe Board
 playB c b = (<|> mapMOf #fuse bumpFuse (discardCard c b)) $ do
     let fireworkNumber = view (#fireworks . numberFor (view #color c)) b
     newFireworkNumber <- bumpFireworkNumber fireworkNumber
-    guard (newFireworkNumber == injectCardNumber (view #number c))
+    guard (newFireworkNumber == injectNumber (view #number c))
     pure (set (#fireworks . numberFor (view #color c)) newFireworkNumber b)
 
 discardB :: Card -> Board -> Board
@@ -132,12 +132,19 @@ handFor p = lens getter (flip setter') where
     getter = fromMaybe err . view (#underlyingMap . at p)
     setter' h = #underlyingMap . at p ?~ h
 
+data Hint
+    = AreColor Player Color (Set CardIx)
+    | AreNumber Player Color (Set Number)
+    deriving (Show, Generic, Eq, Ord)
+makePrisms ''Hint
+
 -- | a god's eye view of the state of the game, used for the core game loop,
 -- judging the actions of the players
 data State = State
     { board :: Board
     , deck :: Deck
     , hands :: Hands
+    , hints :: [Hint]
     }
     deriving (Show, Generic)
 
