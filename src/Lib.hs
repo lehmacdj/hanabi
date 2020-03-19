@@ -113,7 +113,7 @@ type Hand = [Card]
 
 -- returns an affine traversal (one returning 0 or 1 entries only)
 cardFor :: CardIx -> Traversal' Hand Card
-cardFor = element . unrefine
+cardFor = ix . unrefine
 
 data Player = P0 | P1 | P2
     deriving (Show, Generic, Eq, Ord, Enum, Bounded)
@@ -165,7 +165,7 @@ takeCard p cix s = do
     let
       updateDeck = #deck .~ drop 1 (view #deck s)
       updateHand
-        = case s ^? #deck . element 0 of
+        = case s ^? #deck . ix 0 of
             -- this is gross and should be cleaner, could be cleaner
             -- if I was smarter
             Nothing -> over (#hands . handFor p) (deleteAt (unrefine cix))
