@@ -132,12 +132,6 @@ handFor p = lens getter (flip setter') where
     getter = view (#underlyingMap . at p . non err)
     setter' h = #underlyingMap . at p ?~ h
 
-data Hint
-    = AreColor Player Color (Set CardIx)
-    | AreNumber Player Color (Set Number)
-    deriving (Show, Generic, Eq, Ord)
-makePrisms ''Hint
-
 type Hands = PlayerMap Hand
 
 -- | a god's eye view of the state of the game, used for the core game loop,
@@ -191,7 +185,7 @@ data CardPossibilities = CardPossibilities
     { numbers :: [Number]
     , colors :: [Color]
     }
-    deriving (Show, Eq)
+    deriving (Show, Generic, Eq, Ord)
 
 type HandPossibilities = [CardPossibilities]
 
@@ -204,6 +198,25 @@ data PlayerInformation = PlayerInformation
     , cardsInDeck :: Set Card
     , handPossibilities :: HandPossibilities
     }
+    deriving (Show, Generic)
+
+data Hint
+    = AreColor Player Color (Set CardIx)
+    | AreNumber Player Color (Set Number)
+    deriving (Show, Generic, Eq, Ord)
+makePrisms ''Hint
+
+data Action
+    = Play CardIx
+    | Discard CardIx
+    | Hint Player Hint
+    deriving (Show, Generic)
+
+data Turn = Turn
+    { player :: Player
+    , action :: Action
+    }
+    deriving (Show, Generic)
 
 someFunc :: IO ()
 someFunc = pure ()
