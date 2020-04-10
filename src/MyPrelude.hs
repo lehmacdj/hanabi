@@ -7,6 +7,7 @@ module MyPrelude
     , Throws
     , justOrThrow
     , deleteAt
+    , isPermutationOf
     ) where
 
 import qualified Data.Map as Map
@@ -34,5 +35,9 @@ justOrThrow err = \case
     Just x -> pure x
     Nothing -> throw err
 
+-- | Contructs a map from a function applied to each given key
 mapOfFunction :: Ord k => [k] -> (k -> v) -> Map k v
 mapOfFunction ks f = Map.fromList (ks `zip` map f ks)
+
+isPermutationOf :: Ord a => [a] -> [a] -> Bool
+isPermutationOf xs ys = sort xs == sort ys

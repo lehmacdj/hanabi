@@ -1,13 +1,16 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE AllowAmbiguousTypes #-} -- for makeSem with polymorphic type
 
-module Lib
-    ( module Lib
+module Game
+    ( module Game
     ) where
 
 import MyPrelude
 import Refined
 import Refined.Unsafe as Unsafe
 import Data.Generics.Labels ()
+
+import Polysemy.State
 
 -- | amount of time available to the players
 type IsTime = And (From 0) (To 8)
@@ -39,6 +42,10 @@ bumpFuse = refineThrow . succ . unrefine
 type IsNumber = And (From 1) (To 5)
 type Number = Refined IsNumber Int
 
+-- | Needed for Enum/Bounded instance for card
+numberCount :: Int
+numberCount = 5
+
 -- | increase number by 1 failing if that is impossible
 bumpNumber :: Number -> Maybe Number
 bumpNumber = refineThrow . succ . unrefine
@@ -57,13 +64,52 @@ fn0 :: FireworkNumber
 fn0 = $$(refineTH 0)
 
 data Color = Red | Blue | Green | Yellow | White
-    deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+    deriving (Eq, Ord, Enum, Bounded, Generic)
+
+instance Show Color where
+    show = \case
+        Red -> "R"
+        Blue -> "B"
+        Green -> "G"
+        Yellow -> "Y"
+        White -> "W"
+
+-- | needed for Enum Card instance + Bounded Instance
+colorCount :: Int
+colorCount = length [minBound :: Color .. maxBound]
 
 data Card = Card
     { color :: Color
     , number :: Number
     }
-    deriving (Show, Eq, Ord, Generic)
+    deriving (Eq, Ord, Generic)
+
+instance Show Card where
+    show (Card c n) = show c ++ show (unrefine n)
+
+-- TODO: add test for instance
+instance Enum Card where
+    fromEnum (Card c n)  = colorCount * pred (unrefine n) + fromEnum c
+    toEnum i =
+        case over _1 (refineThrow . succ) $ i `divMod` colorCount of
+            (Nothing, _) -> error "out of bounds index for Enum Card"
+            (Just n, c) -> Card (toEnum c) n
+
+-- TODO: add test for instance
+instance Bounded Card where
+    minBound = toEnum 0
+    maxBound = toEnum $ (numberCount - 1) * colorCount + (colorCount - 1)
+
+-- | given a card what is its frequency in the deck
+cardDuplicity :: Card -> Int
+cardDuplicity (Card _ n)
+  | unrefine n == 1 = 3
+  | unrefine n == 5 = 1
+  | otherwise = 2
+
+-- | All of the cards is a list of each card its duplicity times
+allCards :: [Card]
+allCards = [minBound..maxBound] >>= \c -> replicate (cardDuplicity c) c
 
 newtype Fireworks = Fireworks { underlyingMap :: Map Color FireworkNumber }
     deriving (Show, Generic)
@@ -115,31 +161,37 @@ type Hand = [Card]
 cardFor :: CardIx -> Traversal' Hand Card
 cardFor = ix . unrefine
 
-data Player = P0 | P1 | P2
-    deriving (Show, Generic, Eq, Ord, Enum, Bounded)
-
 -- | invariant: Map is total, every entry has a value
 -- makeHands checks this invariant; use it over the Hands construtor
-newtype PlayerMap h = PlayerMap { underlyingMap :: Map Player h }
+-- generally p needs to be Enum, Bounded, and Ord
+-- this ensures that we can enumerate all the players and that they can
+-- be used as a key in a map
+newtype PlayerMap p h = PlayerMap { underlyingMap :: Map p h }
     deriving (Generic, Show)
 
-makeHands :: (Player -> h) -> PlayerMap h
-makeHands = PlayerMap . mapOfFunction [P0, P1, P2]
+makeHands
+    :: (Ord p, Enum p, Bounded p)
+    => (p -> h) -> PlayerMap p h
+makeHands = PlayerMap . mapOfFunction [minBound..maxBound]
 
-handFor :: Eq h => Player -> Lens (PlayerMap h) (PlayerMap h) h h
+handFor
+    :: ( Eq h
+       , Ord p, Enum p, Bounded p
+       )
+    => p -> Lens (PlayerMap p h) (PlayerMap p h) h h
 handFor p = lens getter (flip setter') where
     err = error "invariant violated: handFor lens getter"
     getter = view (#underlyingMap . at p . non err)
     setter' h = #underlyingMap . at p ?~ h
 
-type Hands = PlayerMap Hand
+type Hands p = PlayerMap p Hand
 
 -- | a god's eye view of the state of the game, used for the core game loop,
 -- judging the actions of the players
-data State = State
+data GameState p = GameState
     { board :: Board
     , deck :: Deck
-    , hands :: Hands
+    , hands :: Hands p
     , hints :: [Hint]
     }
     deriving (Show, Generic)
@@ -152,8 +204,10 @@ data GameOver = GameOver
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
 takeCard
-    :: Throws '[CardDoesNotExist] r
-    => Player -> CardIx -> State -> Sem r (Card, State)
+    :: ( Throws '[CardDoesNotExist] r
+       , Ord p, Enum p, Bounded p
+       )
+    => p -> CardIx -> GameState p -> Sem r (Card, GameState p)
 takeCard p cix s = do
     card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
     let
@@ -167,56 +221,67 @@ takeCard p cix s = do
     pure (card, updateHand . updateDeck $ s)
 
 play
-    :: Throws [CardDoesNotExist, GameOver] r
-    => Player -> CardIx -> State -> Sem r State
+    :: ( Throws [CardDoesNotExist, GameOver] r
+       , Ord p, Enum p, Bounded p
+       )
+    => p -> CardIx -> GameState p -> Sem r (GameState p)
 play p cix s = do
     (c, s') <- takeCard p cix s
     justOrThrow GameOver $ mapMOf #board (playB c) s'
 
 discard
-    :: Throws [CardDoesNotExist, GameOver] r
-    => Player -> CardIx -> State -> Sem r State
+    :: ( Throws [CardDoesNotExist, GameOver] r
+       , Ord p, Enum p, Bounded p
+       )
+    => p -> CardIx -> GameState p -> Sem r (GameState p)
 discard p cix s = do
     (c, s') <- takeCard p cix s
     pure $ over #board (discardB c) s'
 
--- | the possibilities  of what a card can be in a players hand
-data CardPossibilities = CardPossibilities
-    { numbers :: [Number]
-    , colors :: [Color]
-    }
-    deriving (Show, Generic, Eq, Ord)
-
-type HandPossibilities = [CardPossibilities]
-
-type HandsInformation = PlayerMap HandPossibilities
-
--- | the information that a player can have about the game
-data PlayerInformation = PlayerInformation
-    { player :: Player
-    , board :: Board
-    , cardsInDeck :: Set Card
-    , handPossibilities :: HandPossibilities
-    }
-    deriving (Show, Generic)
-
 data Hint
-    = AreColor Player Color (Set CardIx)
-    | AreNumber Player Color (Set Number)
+    = AreColor Color (Set CardIx)
+    | AreNumber Color (Set Number)
     deriving (Show, Generic, Eq, Ord)
 makePrisms ''Hint
 
-data Action
+data Action p
     = Play CardIx
     | Discard CardIx
-    | Hint Player Hint
+    | Hint p Hint
+    -- ^ the player specifies the player being given the hint
     deriving (Show, Generic)
 
-data Turn = Turn
-    { player :: Player
-    , action :: Action
+data Turn p = Turn
+    { player :: p
+    , action :: Action p
     }
     deriving (Show, Generic)
 
-someFunc :: IO ()
-someFunc = pure ()
+type HasGameState p = State (GameState p)
+
+-- | Player input/output, the way the game interacts with the players
+data PlayerIO p m a where
+    Prompt :: p -> Board -> PlayerIO p m (Action p)
+    Inform :: p -> PlayerIO p m ()
+makeSem ''PlayerIO
+
+game
+    :: ( Members [PlayerIO p, HasGameState p] r
+       , Throws [CardDoesNotExist, GameOver] r
+       , Ord p, Enum p, Bounded p
+       )
+    => Deck -- ^ must be a permutation of the full deck
+    -> Sem r a
+game startingDeck =
+    let
+      _players = [minBound..maxBound]
+
+      -- | The main game loop
+      loop = undefined
+
+      preconditionMessage = "startingDeck must be a permutation of allCards"
+      precondition = startingDeck `isPermutationOf` allCards
+      checkedLoop
+        | not precondition = error preconditionMessage
+        | otherwise = loop
+     in checkedLoop
