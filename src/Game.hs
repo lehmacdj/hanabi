@@ -91,10 +91,12 @@ instance Show Card where
 -- TODO: add test for instance
 instance Enum Card where
     fromEnum (Card c n)  = colorCount * pred (unrefine n) + fromEnum c
-    toEnum i =
-        case over _1 (refineThrow . succ) $ i `divMod` colorCount of
-            (Nothing, _) -> error "out of bounds index for Enum Card"
-            (Just n, c) -> Card (toEnum c) n
+    toEnum = helper where
+        helper :: HasCallStack => Int -> Card
+        helper i =
+            case over _1 (refineThrow . succ) $ i `divMod` colorCount of
+                (Nothing, _) -> error "out of bounds index for Enum Card"
+                (Just n, c) -> Card (toEnum c) n
 
 -- TODO: add test for instance
 instance Bounded Card where
@@ -169,7 +171,7 @@ newtype PlayerMap p h = PlayerMap { underlyingMap :: Map p h }
     deriving (Generic, Show)
 
 makePlayerMap
-    :: (Ord p, Enum p, Bounded p)
+    :: (HasCallStack, Ord p, Enum p, Bounded p)
     => [(p,h)] -> PlayerMap p h
 makePlayerMap = PlayerMap . mapFromList . checkInvariant where
   checkInvariant xs
@@ -177,7 +179,8 @@ makePlayerMap = PlayerMap . mapFromList . checkInvariant where
     | otherwise = error "every player must be accounted for in PlayerMap"
 
 handFor
-    :: ( Eq h
+    :: ( HasCallStack
+       , Eq h
        , Ord p, Enum p, Bounded p
        )
     => p -> Lens (PlayerMap p h) (PlayerMap p h) h h
@@ -271,12 +274,14 @@ makeSem ''PlayerIO
 
 -- | The number of cards each player starts with in their hand. Dependent
 -- on the number of players.
-startingCardsInHand :: [p] -> Int
+startingCardsInHand :: HasCallStack => [p] -> Int
 startingCardsInHand ps
-  | length ps > 5 = error "startingCardsInHand: too many players"
-  | length ps > 3 = 4
-  | length ps > 0 = 5
+  | playerCount > 5 = error "startingCardsInHand: too many players"
+  | playerCount > 3 = 4
+  | playerCount > 0 = 5
   | otherwise = error "startingCardsInHand: too few players"
+  where
+    playerCount = length ps
 
 dealHands
   :: forall p. (Ord p, Enum p, Bounded p)
@@ -315,7 +320,8 @@ gameLoop currentPlayer = do
 -- | Does precondition verification + sets up GameState/interprets HasGameState
 runGame
     :: forall p r.
-       ( Member (PlayerIO p) r
+       ( HasCallStack
+       , Member (PlayerIO p) r
        , Throws '[CardDoesNotExist] r
        , Ord p, Enum p, Bounded p
        )

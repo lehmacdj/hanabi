@@ -52,6 +52,7 @@ default-extensions:
 ghc-options:
 - -Wall
 - -fplugin=Polysemy.Plugin
+- -Wno-name-shadowing
 
 library:
   source-dirs: src

@@ -1,7 +1,10 @@
 module MyPrelude
     ( module ClassyPrelude
     , module Control.Lens
+    , module Data.Void
     , module Polysemy
+
+    , HasCallStack
 
     , mapOfFunction
     , Throws
@@ -15,8 +18,12 @@ import qualified Data.Map as Map
 import ClassyPrelude hiding (catchIO)
 import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, cons)
 
+import Data.Void
+
 import Polysemy
 import Polysemy.Error (Error, throw)
+
+import GHC.Stack (HasCallStack)
 
 type family TMap (f :: k -> k') (xs :: [k]) :: [k'] where
     TMap f '[] = '[]
