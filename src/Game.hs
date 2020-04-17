@@ -11,6 +11,7 @@ import Refined.Unsafe as Unsafe
 import Data.Generics.Labels ()
 
 import Polysemy.State
+import Polysemy.Error
 
 -- | amount of time available to the players
 type IsTime = And (From 0) (To 8)
@@ -114,6 +115,9 @@ allCards = [minBound..maxBound] >>= \c -> replicate (cardDuplicity c) c
 newtype Fireworks = Fireworks { underlyingMap :: Map Color FireworkNumber }
     deriving (Show, Generic)
 
+startingFireworks :: Fireworks
+startingFireworks = Fireworks . mapFromList $ [Red .. White] `zip` repeat fn0
+
 numberFor :: Color -> Lens' Fireworks FireworkNumber
 numberFor c = lens getter (flip setter') where
     getter = fromMaybe fn0 . view (#underlyingMap . at c)
@@ -127,6 +131,9 @@ data Board = Board
     , discarded :: Set Card
     }
     deriving (Show, Generic)
+
+startingBoard :: Board
+startingBoard = Board startingFireworks maxTime fuseStart mempty
 
 -- | add a given card to the discard pile
 discardCard :: Card -> Board -> Board
@@ -146,33 +153,28 @@ discardB c = discardCard c . over #time addTime
 
 type Deck = [Card]
 
-type IsCardIx = And (From 0) (To 4)
-type CardIx = Refined IsCardIx Int
-c0, c1, c2, c3, c4 :: CardIx
-c0 = $$(refineTH 0)
-c1 = $$(refineTH 1)
-c2 = $$(refineTH 2)
-c3 = $$(refineTH 3)
-c4 = $$(refineTH 4)
-
+type CardIx = Int
 type Hand = [Card]
 
 -- returns an affine traversal (one returning 0 or 1 entries only)
-cardFor :: CardIx -> Traversal' Hand Card
-cardFor = ix . unrefine
+cardFor :: Int -> Traversal' Hand Card
+cardFor = ix
 
 -- | invariant: Map is total, every entry has a value
--- makeHands checks this invariant; use it over the Hands construtor
+-- makePlayerMap checks this invariant; use it over the Hands construtor
 -- generally p needs to be Enum, Bounded, and Ord
 -- this ensures that we can enumerate all the players and that they can
 -- be used as a key in a map
 newtype PlayerMap p h = PlayerMap { underlyingMap :: Map p h }
     deriving (Generic, Show)
 
-makeHands
+makePlayerMap
     :: (Ord p, Enum p, Bounded p)
-    => (p -> h) -> PlayerMap p h
-makeHands = PlayerMap . mapOfFunction [minBound..maxBound]
+    => [(p,h)] -> PlayerMap p h
+makePlayerMap = PlayerMap . mapFromList . checkInvariant where
+  checkInvariant xs
+    | map fst xs `isPermutationOf` [minBound..maxBound] = xs
+    | otherwise = error "every player must be accounted for in PlayerMap"
 
 handFor
     :: ( Eq h
@@ -192,7 +194,6 @@ data GameState p = GameState
     { board :: Board
     , deck :: Deck
     , hands :: Hands p
-    , hints :: [Hint]
     }
     deriving (Show, Generic)
 
@@ -216,7 +217,7 @@ takeCard p cix s = do
         = case s ^? #deck . ix 0 of
             -- this is gross and should be cleaner, could be cleaner
             -- if I was smarter
-            Nothing -> over (#hands . handFor p) (deleteAt (unrefine cix))
+            Nothing -> over (#hands . handFor p) (deleteAt cix)
             Just nextCard -> #hands . handFor p . cardFor cix .~ nextCard
     pure (card, updateHand . updateDeck $ s)
 
@@ -261,27 +262,80 @@ type HasGameState p = State (GameState p)
 
 -- | Player input/output, the way the game interacts with the players
 data PlayerIO p m a where
-    Prompt :: p -> Board -> PlayerIO p m (Action p)
+    Prompt :: p -- ^ the player to prompt
+           -> Board -- ^ the board at the time of the prompt
+           -> Int -- ^ the number of cards left in the deck at time of prompt
+           -> PlayerIO p m (Action p)
     Inform :: p -> PlayerIO p m ()
 makeSem ''PlayerIO
 
-game
-    :: ( Members [PlayerIO p, HasGameState p] r
+-- | The number of cards each player starts with in their hand. Dependent
+-- on the number of players.
+startingCardsInHand :: [p] -> Int
+startingCardsInHand ps
+  | length ps > 5 = error "startingCardsInHand: too many players"
+  | length ps > 3 = 4
+  | length ps > 0 = 5
+  | otherwise = error "startingCardsInHand: too few players"
+
+dealHands
+  :: forall p. (Ord p, Enum p, Bounded p)
+  => Deck -> (Deck, Hands p)
+dealHands startingDeck = (remainingDeck, makePlayerMap (players `zip` hs)) where
+    players = [minBound :: p .. maxBound]
+    startingCards = startingCardsInHand [minBound :: p .. maxBound]
+    (remainingDeck, hs) = run . runState startingDeck $ playerHands
+    playerHands = replicateM (length players) dealHand
+    dealHand :: Member (State Deck) r => Sem r Hand
+    dealHand = do
+      d <- get @Deck
+      let (hand, rest) = splitAt startingCards d
+      put @Deck rest
+      pure hand
+
+cycledSucc :: (Eq a, Enum a, Bounded a) => a -> a
+cycledSucc x
+  | x == maxBound = minBound
+  | otherwise = succ x
+
+gameLoop
+    :: forall p r.
+       ( Members [PlayerIO p, HasGameState p] r
        , Throws [CardDoesNotExist, GameOver] r
        , Ord p, Enum p, Bounded p
        )
+    => p -- ^ the player whose turn it is
+    -> Sem r Void
+gameLoop currentPlayer = do
+    s <- get @(GameState p)
+    a <- prompt currentPlayer (view #board s) (view (#deck . to length) s)
+    undefined a -- give info to players + update the state
+    gameLoop (cycledSucc currentPlayer)
+
+-- | Does precondition verification + sets up GameState/interprets HasGameState
+runGame
+    :: forall p r.
+       ( Member (PlayerIO p) r
+       , Throws '[CardDoesNotExist] r
+       , Ord p, Enum p, Bounded p
+       )
     => Deck -- ^ must be a permutation of the full deck
-    -> Sem r a
-game startingDeck =
+    -> Sem r Fireworks -- ^ result is the fireworks produced by the game
+runGame shuffledDeck =
     let
       _players = [minBound..maxBound]
+      (startingDeck, startingHands) = dealHands @p shuffledDeck
+      startingState = GameState startingBoard startingDeck startingHands
 
-      -- | The main game loop
-      loop = undefined
-
-      preconditionMessage = "startingDeck must be a permutation of allCards"
-      precondition = startingDeck `isPermutationOf` allCards
+      startingDeckMsg = "startingDeck must be a permutation of allCards"
+      startingDeckPre = startingDeck `isPermutationOf` allCards
       checkedLoop
-        | not precondition = error preconditionMessage
-        | otherwise = loop
-     in checkedLoop
+        | not startingDeckPre = error startingDeckMsg
+        | otherwise = gameLoop @p @(Error GameOver : State (GameState p) : r)
+     in fmap (view (_1 . #board . #fireworks))
+      . runState startingState
+      . runError'
+      $ checkedLoop (minBound @p)
+      where
+        runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
+        runError' = fmap (either id absurd) . runError
