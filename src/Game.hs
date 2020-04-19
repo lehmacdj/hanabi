@@ -269,7 +269,7 @@ data PlayerIO p m a where
            -> Board -- ^ the board at the time of the prompt
            -> Int -- ^ the number of cards left in the deck at time of prompt
            -> PlayerIO p m (Action p)
-    Inform :: p -> PlayerIO p m ()
+    Inform :: p -> action -> PlayerIO p m ()
 makeSem ''PlayerIO
 
 -- | The number of cards each player starts with in their hand. Dependent
@@ -298,11 +298,6 @@ dealHands startingDeck = (remainingDeck, makePlayerMap (players `zip` hs)) where
       put @Deck rest
       pure hand
 
-cycledSucc :: (Eq a, Enum a, Bounded a) => a -> a
-cycledSucc x
-  | x == maxBound = minBound
-  | otherwise = succ x
-
 gameLoop
     :: forall p r.
        ( Members [PlayerIO p, HasGameState p] r
@@ -315,7 +310,7 @@ gameLoop currentPlayer = do
     s <- get @(GameState p)
     a <- prompt currentPlayer (view #board s) (view (#deck . to length) s)
     undefined a -- give info to players + update the state
-    gameLoop (cycledSucc currentPlayer)
+    gameLoop (next currentPlayer)
 
 -- | Does precondition verification + sets up GameState/interprets HasGameState
 runGame
