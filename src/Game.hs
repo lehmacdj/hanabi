@@ -200,15 +200,51 @@ data GameState p = GameState
     }
     deriving (Show, Generic)
 
+data Hint
+    = AreColor Color (Set CardIx)
+    | AreNumber Color (Set Number)
+    deriving (Show, Generic, Eq, Ord)
+makePrisms ''Hint
+
+data Action p
+    = Play CardIx
+    | Discard CardIx
+    | Hint p Hint
+    -- ^ the player specifies the player being given the hint
+    deriving (Show, Generic)
+
+data Information p
+    = TookAction p (Action p)
+    | Drew p CardIx Card
+    deriving (Show, Generic)
+
 data CardDoesNotExist = CardDoesNotExist
     deriving (Show)
 data GameOver = GameOver
     deriving (Show)
 
+-- | Player input/output, the way the game interacts with the players
+data PlayerIO p m a where
+    Prompt :: p -- ^ the player to prompt
+           -> Board -- ^ the board at the time of the prompt
+           -> Int -- ^ the number of cards left in the deck at time of prompt
+           -> PlayerIO p m (Action p)
+    Inform :: p -> Information p -> PlayerIO p m ()
+makeSem ''PlayerIO
+
+broadcast
+  :: forall p r.
+     ( Member (PlayerIO p) r
+     , Enum p, Bounded p
+     )
+  => Information p -> Sem r ()
+broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
+
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
 takeCard
-    :: ( Throws '[CardDoesNotExist] r
+    :: ( Member (PlayerIO p) r
+       , Throws '[CardDoesNotExist] r
        , Ord p, Enum p, Bounded p
        )
     => p -> CardIx -> GameState p -> Sem r (Card, GameState p)
@@ -225,7 +261,8 @@ takeCard p cix s = do
     pure (card, updateHand . updateDeck $ s)
 
 play
-    :: ( Throws [CardDoesNotExist, GameOver] r
+    :: ( Member (PlayerIO p) r
+       , Throws [CardDoesNotExist, GameOver] r
        , Ord p, Enum p, Bounded p
        )
     => p -> CardIx -> GameState p -> Sem r (GameState p)
@@ -234,7 +271,8 @@ play p cix s = do
     justOrThrow GameOver $ mapMOf #board (playB c) s'
 
 discard
-    :: ( Throws [CardDoesNotExist, GameOver] r
+    :: ( Member (PlayerIO p) r
+       , Throws [CardDoesNotExist, GameOver] r
        , Ord p, Enum p, Bounded p
        )
     => p -> CardIx -> GameState p -> Sem r (GameState p)
@@ -242,35 +280,7 @@ discard p cix s = do
     (c, s') <- takeCard p cix s
     pure $ over #board (discardB c) s'
 
-data Hint
-    = AreColor Color (Set CardIx)
-    | AreNumber Color (Set Number)
-    deriving (Show, Generic, Eq, Ord)
-makePrisms ''Hint
-
-data Action p
-    = Play CardIx
-    | Discard CardIx
-    | Hint p Hint
-    -- ^ the player specifies the player being given the hint
-    deriving (Show, Generic)
-
-data Turn p = Turn
-    { player :: p
-    , action :: Action p
-    }
-    deriving (Show, Generic)
-
 type HasGameState p = State (GameState p)
-
--- | Player input/output, the way the game interacts with the players
-data PlayerIO p m a where
-    Prompt :: p -- ^ the player to prompt
-           -> Board -- ^ the board at the time of the prompt
-           -> Int -- ^ the number of cards left in the deck at time of prompt
-           -> PlayerIO p m (Action p)
-    Inform :: p -> action -> PlayerIO p m ()
-makeSem ''PlayerIO
 
 -- | The number of cards each player starts with in their hand. Dependent
 -- on the number of players.
@@ -309,7 +319,8 @@ gameLoop
 gameLoop currentPlayer = do
     s <- get @(GameState p)
     a <- prompt currentPlayer (view #board s) (view (#deck . to length) s)
-    undefined a -- give info to players + update the state
+    broadcast (TookAction currentPlayer a)
+    undefined a -- update the state giving info to players as needed
     gameLoop (next currentPlayer)
 
 -- | Does precondition verification + sets up GameState/interprets HasGameState
