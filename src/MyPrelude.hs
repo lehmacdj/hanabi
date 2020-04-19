@@ -11,6 +11,7 @@ module MyPrelude
     , justOrThrow
     , deleteAt
     , isPermutationOf
+    , next
     ) where
 
 import qualified Data.Map as Map
@@ -48,3 +49,9 @@ mapOfFunction ks f = Map.fromList (ks `zip` map f ks)
 
 isPermutationOf :: Ord a => [a] -> [a] -> Bool
 isPermutationOf xs ys = sort xs == sort ys
+
+-- | succ but wraps around if the element is maxBound
+next :: (Eq a, Enum a, Bounded a) => a -> a
+next x
+  | x == maxBound = minBound
+  | otherwise = succ x
