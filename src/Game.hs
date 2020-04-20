@@ -202,7 +202,7 @@ data GameState p = GameState
 
 data Hint
     = AreColor Color (Set CardIx)
-    | AreNumber Color (Set Number)
+    | AreNumber Number (Set CardIx)
     deriving (Show, Generic, Eq, Ord)
 makePrisms ''Hint
 
@@ -261,24 +261,38 @@ takeCard p cix s = do
     pure (card, updateHand . updateDeck $ s)
 
 play
-    :: ( Member (PlayerIO p) r
-       , Throws [CardDoesNotExist, GameOver] r
-       , Ord p, Enum p, Bounded p
-       )
-    => p -> CardIx -> GameState p -> Sem r (GameState p)
-play p cix s = do
-    (c, s') <- takeCard p cix s
-    justOrThrow GameOver $ mapMOf #board (playB c) s'
+  :: forall p r.
+     ( Members [PlayerIO p, HasGameState p] r
+     , Throws [CardDoesNotExist, GameOver] r
+     , Ord p, Enum p, Bounded p
+     )
+  => p -> CardIx -> Sem r ()
+play p cix = do
+  s <- get @(GameState p)
+  (c, s) <- takeCard p cix s
+  s <- justOrThrow GameOver $ mapMOf #board (playB c) s
+  put s
 
 discard
-    :: ( Member (PlayerIO p) r
-       , Throws [CardDoesNotExist, GameOver] r
-       , Ord p, Enum p, Bounded p
-       )
-    => p -> CardIx -> GameState p -> Sem r (GameState p)
-discard p cix s = do
-    (c, s') <- takeCard p cix s
-    pure $ over #board (discardB c) s'
+  :: forall p r.
+     ( Members [PlayerIO p, HasGameState p] r
+     , Throws [CardDoesNotExist, GameOver] r
+     , Ord p, Enum p, Bounded p
+     )
+  => p -> CardIx -> Sem r ()
+discard p cix = do
+  s <- get @(GameState p)
+  (c, s) <- takeCard p cix s
+  s <- pure $ over #board (discardB c) s
+  put s
+
+hint
+  :: forall p r.
+     ( Members [PlayerIO p, HasGameState p] r
+     , Throws '[GameOver] r
+     )
+  => p -> Hint -> Sem r ()
+hint = undefined
 
 type HasGameState p = State (GameState p)
 
@@ -308,20 +322,53 @@ dealHands startingDeck = (remainingDeck, makePlayerMap (players `zip` hs)) where
       put @Deck rest
       pure hand
 
+hintIsValidFor :: Hint -> Hand -> Bool
+hintIsValidFor hint hand =
+  let
+    allIxs = setFromList [0 .. length hand - 1]
+    testPos, testNeg :: Eq a => a -> Lens' Card a -> Set CardIx -> Bool
+    testPos x l = all (\i -> has (ix i . l . only x) hand)
+    testNeg x l ixs =
+      none (\i -> has (ix i . l . only x) hand) (allIxs `difference` ixs)
+   in case hint of
+        AreColor c ixs -> testPos c #color ixs && testNeg c #color ixs
+        AreNumber n ixs -> testPos n #number ixs && testNeg n #number ixs
+
+validateAction
+  :: forall p r.
+     ( Member (HasGameState p) r
+     , Enum p, Bounded p, Ord p
+     )
+  => Action p -> Sem r (Maybe (Action p))
+validateAction a = do
+  hs <- view #hands <$> get @(GameState p)
+  pure $ case a of
+    a'@(Hint p hint)
+      | hint `hintIsValidFor` view (handFor p) hs -> Just a'
+      | otherwise -> Nothing
+    a' -> Just a'
+
 gameLoop
-    :: forall p r.
-       ( Members [PlayerIO p, HasGameState p] r
-       , Throws [CardDoesNotExist, GameOver] r
-       , Ord p, Enum p, Bounded p
-       )
-    => p -- ^ the player whose turn it is
-    -> Sem r Void
+  :: forall p r.
+     ( Members [PlayerIO p, HasGameState p] r
+     , Throws [CardDoesNotExist, GameOver] r
+     , Ord p, Enum p, Bounded p
+     )
+  => p -- ^ the player whose turn it is
+  -> Sem r Void
 gameLoop currentPlayer = do
-    s <- get @(GameState p)
-    a <- prompt currentPlayer (view #board s) (view (#deck . to length) s)
-    broadcast (TookAction currentPlayer a)
-    undefined a -- update the state giving info to players as needed
-    gameLoop (next currentPlayer)
+  s <- get @(GameState p)
+  let
+    b = view #board s
+    ds = view (#deck . to length) s
+    promptCurrentPlayer = prompt currentPlayer b ds
+  a <- untilJust (promptCurrentPlayer >>= validateAction)
+  broadcast (TookAction currentPlayer a)
+  case a of
+    Play cix -> play currentPlayer cix
+    Discard cix -> discard currentPlayer cix
+    Hint p h -> hint p h
+  gameLoop (next currentPlayer)
 
 -- | Does precondition verification + sets up GameState/interprets HasGameState
 runGame
