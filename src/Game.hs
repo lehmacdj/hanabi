@@ -2,8 +2,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-} -- for makeSem with polymorphic type
 
 module Game
-    ( module Game
-    ) where
+  ( module Game
+  ) where
 
 import MyPrelude
 import Refined
@@ -65,43 +65,43 @@ fn0 :: FireworkNumber
 fn0 = $$(refineTH 0)
 
 data Color = Red | Blue | Green | Yellow | White
-    deriving (Eq, Ord, Enum, Bounded, Generic)
+  deriving (Eq, Ord, Enum, Bounded, Generic)
 
 instance Show Color where
-    show = \case
-        Red -> "R"
-        Blue -> "B"
-        Green -> "G"
-        Yellow -> "Y"
-        White -> "W"
+  show = \case
+    Red -> "R"
+    Blue -> "B"
+    Green -> "G"
+    Yellow -> "Y"
+    White -> "W"
 
 -- | needed for Enum Card instance + Bounded Instance
 colorCount :: Int
 colorCount = length [minBound :: Color .. maxBound]
 
 data Card = Card
-    { color :: Color
-    , number :: Number
-    }
-    deriving (Eq, Ord, Generic)
+  { color :: Color
+  , number :: Number
+  }
+  deriving (Eq, Ord, Generic)
 
 instance Show Card where
-    show (Card c n) = show c ++ show (unrefine n)
+  show (Card c n) = show c ++ show (unrefine n)
 
 -- TODO: add test for instance
 instance Enum Card where
-    fromEnum (Card c n)  = colorCount * pred (unrefine n) + fromEnum c
-    toEnum = helper where
-        helper :: HasCallStack => Int -> Card
-        helper i =
-            case over _1 (refineThrow . succ) $ i `divMod` colorCount of
-                (Nothing, _) -> error "out of bounds index for Enum Card"
-                (Just n, c) -> Card (toEnum c) n
+  fromEnum (Card c n)  = colorCount * pred (unrefine n) + fromEnum c
+  toEnum = helper where
+    helper :: HasCallStack => Int -> Card
+    helper i =
+      case over _1 (refineThrow . succ) $ i `divMod` colorCount of
+        (Nothing, _) -> error "out of bounds index for Enum Card"
+        (Just n, c) -> Card (toEnum c) n
 
 -- TODO: add test for instance
 instance Bounded Card where
-    minBound = toEnum 0
-    maxBound = toEnum $ (numberCount - 1) * colorCount + (colorCount - 1)
+  minBound = toEnum 0
+  maxBound = toEnum $ (numberCount - 1) * colorCount + (colorCount - 1)
 
 -- | given a card what is its frequency in the deck
 cardDuplicity :: Card -> Int
@@ -115,24 +115,24 @@ allCards :: [Card]
 allCards = [minBound..maxBound] >>= \c -> replicate (cardDuplicity c) c
 
 newtype Fireworks = Fireworks { underlyingMap :: Map Color FireworkNumber }
-    deriving (Show, Generic)
+  deriving (Show, Generic)
 
 startingFireworks :: Fireworks
 startingFireworks = Fireworks . mapFromList $ [Red .. White] `zip` repeat fn0
 
 numberFor :: Color -> Lens' Fireworks FireworkNumber
 numberFor c = lens getter (flip setter') where
-    getter = fromMaybe fn0 . view (#underlyingMap . at c)
-    setter' n = #underlyingMap . at c ?~ n
+  getter = fromMaybe fn0 . view (#underlyingMap . at c)
+  setter' n = #underlyingMap . at c ?~ n
 
 -- | the board is the state shared between all players
 data Board = Board
-    { fireworks :: Fireworks
-    , time :: Time
-    , fuse :: Fuse
-    , discarded :: Set Card
-    }
-    deriving (Show, Generic)
+  { fireworks :: Fireworks
+  , time :: Time
+  , fuse :: Fuse
+  , discarded :: Set Card
+  }
+  deriving (Show, Generic)
 
 startingBoard :: Board
 startingBoard = Board startingFireworks maxTime fuseStart mempty
@@ -145,10 +145,10 @@ discardCard c = #discarded <>~ singleton c
 -- return Nothing if the game is over
 playB :: Card -> Board -> Maybe Board
 playB c b = (<|> mapMOf #fuse bumpFuse (discardCard c b)) $ do
-    let fireworkNumber = view (#fireworks . numberFor (view #color c)) b
-    newFireworkNumber <- bumpFireworkNumber fireworkNumber
-    guard (newFireworkNumber == injectNumber (view #number c))
-    pure (set (#fireworks . numberFor (view #color c)) newFireworkNumber b)
+  let fireworkNumber = view (#fireworks . numberFor (view #color c)) b
+  newFireworkNumber <- bumpFireworkNumber fireworkNumber
+  guard (newFireworkNumber == injectNumber (view #number c))
+  pure (set (#fireworks . numberFor (view #color c)) newFireworkNumber b)
 
 discardB :: Card -> Board -> Board
 discardB c = discardCard c . over #time addTime
@@ -168,7 +168,7 @@ cardFor = ix
 -- this ensures that we can enumerate all the players and that they can
 -- be used as a key in a map
 newtype PlayerMap p h = PlayerMap { underlyingMap :: Map p h }
-    deriving (Generic, Show)
+  deriving (Generic, Show)
 
 makePlayerMap
     :: (HasCallStack, Ord p, Enum p, Bounded p)
@@ -179,57 +179,57 @@ makePlayerMap = PlayerMap . mapFromList . checkInvariant where
     | otherwise = error "every player must be accounted for in PlayerMap"
 
 handFor
-    :: ( HasCallStack
-       , Eq h
-       , Ord p, Enum p, Bounded p
-       )
-    => p -> Lens (PlayerMap p h) (PlayerMap p h) h h
+  :: ( HasCallStack
+     , Eq h
+     , Ord p, Enum p, Bounded p
+     )
+  => p -> Lens (PlayerMap p h) (PlayerMap p h) h h
 handFor p = lens getter (flip setter') where
-    err = error "invariant violated: handFor lens getter"
-    getter = view (#underlyingMap . at p . non err)
-    setter' h = #underlyingMap . at p ?~ h
+  err = error "invariant violated: handFor lens getter"
+  getter = view (#underlyingMap . at p . non err)
+  setter' h = #underlyingMap . at p ?~ h
 
 type Hands p = PlayerMap p Hand
 
 -- | a god's eye view of the state of the game, used for the core game loop,
 -- judging the actions of the players
 data GameState p = GameState
-    { board :: Board
-    , deck :: Deck
-    , hands :: Hands p
-    }
-    deriving (Show, Generic)
+  { board :: Board
+  , deck :: Deck
+  , hands :: Hands p
+  }
+  deriving (Show, Generic)
 
 data Hint
-    = AreColor Color (Set CardIx)
-    | AreNumber Number (Set CardIx)
-    deriving (Show, Generic, Eq, Ord)
+  = AreColor Color (Set CardIx)
+  | AreNumber Number (Set CardIx)
+  deriving (Show, Generic, Eq, Ord)
 makePrisms ''Hint
 
 data Action p
-    = Play CardIx
-    | Discard CardIx
-    | Hint p Hint
-    -- ^ the player specifies the player being given the hint
-    deriving (Show, Generic)
+  = Play CardIx
+  | Discard CardIx
+  | Hint p Hint
+  -- ^ the player specifies the player being given the hint
+  deriving (Show, Generic)
 
 data Information p
-    = TookAction p (Action p)
-    | Drew p CardIx Card
-    deriving (Show, Generic)
+  = TookAction p (Action p)
+  | Drew p CardIx Card
+  deriving (Show, Generic)
 
 data CardDoesNotExist = CardDoesNotExist
-    deriving (Show)
+  deriving (Show)
 data GameOver = GameOver
-    deriving (Show)
+  deriving (Show)
 
 -- | Player input/output, the way the game interacts with the players
 data PlayerIO p m a where
-    Prompt :: p -- ^ the player to prompt
-           -> Board -- ^ the board at the time of the prompt
-           -> Int -- ^ the number of cards left in the deck at time of prompt
-           -> PlayerIO p m (Action p)
-    Inform :: p -> Information p -> PlayerIO p m ()
+  Prompt :: p -- ^ the player to prompt
+         -> Board -- ^ the board at the time of the prompt
+         -> Int -- ^ the number of cards left in the deck at time of prompt
+         -> PlayerIO p m (Action p)
+  Inform :: p -> Information p -> PlayerIO p m ()
 makeSem ''PlayerIO
 
 broadcast
@@ -243,22 +243,22 @@ broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
 takeCard
-    :: ( Member (PlayerIO p) r
-       , Throws '[CardDoesNotExist] r
-       , Ord p, Enum p, Bounded p
-       )
-    => p -> CardIx -> GameState p -> Sem r (Card, GameState p)
+  :: ( Member (PlayerIO p) r
+     , Throws '[CardDoesNotExist] r
+     , Ord p, Enum p, Bounded p
+     )
+  => p -> CardIx -> GameState p -> Sem r (Card, GameState p)
 takeCard p cix s = do
-    card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
-    let
-      updateDeck = #deck .~ drop 1 (view #deck s)
-      updateHand
-        = case s ^? #deck . ix 0 of
-            -- this is gross and should be cleaner, could be cleaner
-            -- if I was smarter
-            Nothing -> over (#hands . handFor p) (deleteAt cix)
-            Just nextCard -> #hands . handFor p . cardFor cix .~ nextCard
-    pure (card, updateHand . updateDeck $ s)
+  card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
+  let
+    updateDeck = #deck .~ drop 1 (view #deck s)
+    updateHand
+      = case s ^? #deck . ix 0 of
+          -- this is gross and should be cleaner, could be cleaner
+          -- if I was smarter
+          Nothing -> over (#hands . handFor p) (deleteAt cix)
+          Just nextCard -> #hands . handFor p . cardFor cix .~ nextCard
+  pure (card, updateHand . updateDeck $ s)
 
 play
   :: forall p r.
@@ -311,16 +311,16 @@ dealHands
   :: forall p. (Ord p, Enum p, Bounded p)
   => Deck -> (Deck, Hands p)
 dealHands startingDeck = (remainingDeck, makePlayerMap (players `zip` hs)) where
-    players = [minBound :: p .. maxBound]
-    startingCards = startingCardsInHand [minBound :: p .. maxBound]
-    (remainingDeck, hs) = run . runState startingDeck $ playerHands
-    playerHands = replicateM (length players) dealHand
-    dealHand :: Member (State Deck) r => Sem r Hand
-    dealHand = do
-      d <- get @Deck
-      let (hand, rest) = splitAt startingCards d
-      put @Deck rest
-      pure hand
+  players = [minBound :: p .. maxBound]
+  startingCards = startingCardsInHand [minBound :: p .. maxBound]
+  (remainingDeck, hs) = run . runState startingDeck $ playerHands
+  playerHands = replicateM (length players) dealHand
+  dealHand :: Member (State Deck) r => Sem r Hand
+  dealHand = do
+    d <- get @Deck
+    let (hand, rest) = splitAt startingCards d
+    put @Deck rest
+    pure hand
 
 hintIsValidFor :: Hint -> Hand -> Bool
 hintIsValidFor hint hand =
@@ -372,29 +372,29 @@ gameLoop currentPlayer = do
 
 -- | Does precondition verification + sets up GameState/interprets HasGameState
 runGame
-    :: forall p r.
-       ( HasCallStack
-       , Member (PlayerIO p) r
-       , Throws '[CardDoesNotExist] r
-       , Ord p, Enum p, Bounded p
-       )
-    => Deck -- ^ must be a permutation of the full deck
-    -> Sem r Fireworks -- ^ result is the fireworks produced by the game
+  :: forall p r.
+     ( HasCallStack
+     , Member (PlayerIO p) r
+     , Throws '[CardDoesNotExist] r
+     , Ord p, Enum p, Bounded p
+     )
+  => Deck -- ^ must be a permutation of the full deck
+  -> Sem r Fireworks -- ^ result is the fireworks produced by the game
 runGame shuffledDeck =
-    let
-      _players = [minBound..maxBound]
-      (startingDeck, startingHands) = dealHands @p shuffledDeck
-      startingState = GameState startingBoard startingDeck startingHands
+  let
+    _players = [minBound..maxBound]
+    (startingDeck, startingHands) = dealHands @p shuffledDeck
+    startingState = GameState startingBoard startingDeck startingHands
 
-      startingDeckMsg = "startingDeck must be a permutation of allCards"
-      startingDeckPre = startingDeck `isPermutationOf` allCards
-      checkedLoop
-        | not startingDeckPre = error startingDeckMsg
-        | otherwise = gameLoop @p @(Error GameOver : State (GameState p) : r)
-     in fmap (view (_1 . #board . #fireworks))
-      . runState startingState
-      . runError'
-      $ checkedLoop (minBound @p)
-      where
-        runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
-        runError' = fmap (either id absurd) . runError
+    startingDeckMsg = "startingDeck must be a permutation of allCards"
+    startingDeckPre = startingDeck `isPermutationOf` allCards
+    checkedLoop
+      | not startingDeckPre = error startingDeckMsg
+      | otherwise = gameLoop @p @(Error GameOver : State (GameState p) : r)
+   in fmap (view (_1 . #board . #fireworks))
+    . runState startingState
+    . runError'
+    $ checkedLoop (minBound @p)
+    where
+      runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
+      runError' = fmap (either id absurd) . runError
