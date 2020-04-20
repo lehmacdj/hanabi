@@ -200,6 +200,8 @@ data GameState p = GameState
   }
   deriving (Show, Generic)
 
+type HasGameState p = State (GameState p)
+
 data Hint
   = AreColor Color (Set CardIx)
   | AreNumber Number (Set CardIx)
@@ -232,6 +234,15 @@ data PlayerIO p m a where
   Inform :: p -> Information p -> PlayerIO p m ()
 makeSem ''PlayerIO
 
+informExcept
+  :: forall p r.
+     ( Member (PlayerIO p) r
+     , Enum p, Bounded p, Eq p
+     )
+  => p -> Information p -> Sem r ()
+informExcept p info =
+  for_ (filter (/= p) [minBound :: p .. maxBound]) $ \p -> inform p info
+
 broadcast
   :: forall p r.
      ( Member (PlayerIO p) r
@@ -242,6 +253,7 @@ broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
 
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
+-- TODO: distribute information about what cards are drawn from the deck
 takeCard
   :: ( Member (PlayerIO p) r
      , Throws '[CardDoesNotExist] r
@@ -293,8 +305,6 @@ hint
      )
   => p -> Hint -> Sem r ()
 hint = undefined
-
-type HasGameState p = State (GameState p)
 
 -- | The number of cards each player starts with in their hand. Dependent
 -- on the number of players.
