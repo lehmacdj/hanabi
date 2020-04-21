@@ -14,6 +14,8 @@ module MyPrelude
   , next
   , untilJust
   , whenJust
+  , setExcept
+  , setAny
   ) where
 
 import qualified Data.Map as Map
@@ -71,3 +73,9 @@ untilJust m = go
 -- taken from: extra
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
 whenJust mg f = maybe (pure ()) f mg
+
+setExcept :: (Enum a, Bounded a, Ord a) => a -> Set a
+setExcept x = setAny `difference` singleton x
+
+setAny :: (Enum a, Bounded a, Ord a) => Set a
+setAny = setFromList [minBound .. maxBound]

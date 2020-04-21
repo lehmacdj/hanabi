@@ -1,5 +1,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE AllowAmbiguousTypes #-} -- for makeSem with polymorphic type
+-- makeWrapped needs these two
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Game
   ( module Game
@@ -42,15 +45,28 @@ bumpFuse :: Fuse -> Maybe Fuse
 bumpFuse = refineThrow . succ . unrefine
 
 type IsNumber = And (From 1) (To 5)
-type Number = Refined IsNumber Int
+newtype Number = Number { unNumber :: Refined IsNumber Int }
+  deriving (Generic, Eq, Ord)
+makeWrapped ''Number
+
+instance Show Number where
+  show = show . unrefine . unNumber
+
+instance Enum Number where
+  fromEnum = unrefine . unNumber
+  toEnum = Number . Unsafe.unsafeRefine
+
+instance Bounded Number where
+  minBound = Number ($$(refineTH 1) :: Refined IsNumber Int)
+  maxBound = Number ($$(refineTH 5) :: Refined IsNumber Int)
 
 -- | Needed for Enum/Bounded instance for card
 numberCount :: Int
-numberCount = 5
+numberCount = length [minBound :: Number .. maxBound]
 
 -- | increase number by 1 failing if that is impossible
 bumpNumber :: Number -> Maybe Number
-bumpNumber = refineThrow . succ . unrefine
+bumpNumber = fmap Number . refineThrow . succ . unrefine . unNumber
 
 type IsFireworkNumber = And (From 0) (To 5)
 type FireworkNumber = Refined IsFireworkNumber Int
@@ -60,7 +76,7 @@ bumpFireworkNumber :: FireworkNumber -> Maybe FireworkNumber
 bumpFireworkNumber = refineThrow . succ . unrefine
 
 injectNumber :: Number -> FireworkNumber
-injectNumber = Unsafe.reallyUnsafeRefine . unrefine
+injectNumber = Unsafe.reallyUnsafeRefine . unrefine . unNumber
 
 fn0 :: FireworkNumber
 fn0 = $$(refineTH 0)
@@ -87,15 +103,15 @@ data Card = Card
   deriving (Eq, Ord, Generic)
 
 instance Show Card where
-  show (Card c n) = show c ++ show (unrefine n)
+  show (Card c n) = show c ++ show (unrefine (unNumber n))
 
 -- TODO: add test for instance
 instance Enum Card where
-  fromEnum (Card c n)  = colorCount * pred (unrefine n) + fromEnum c
+  fromEnum (Card c n)  = colorCount * pred (unrefine (unNumber n)) + fromEnum c
   toEnum = helper where
     helper :: HasCallStack => Int -> Card
     helper i =
-      case over _1 (refineThrow . succ) $ i `divMod` colorCount of
+      case over _1 (fmap Number . refineThrow . succ) $ i `divMod` colorCount of
         (Nothing, _) -> error "out of bounds index for Enum Card"
         (Just n, c) -> Card (toEnum c) n
 
@@ -107,8 +123,8 @@ instance Bounded Card where
 -- | given a card what is its frequency in the deck
 cardDuplicity :: Card -> Int
 cardDuplicity (Card _ n)
-  | unrefine n == 1 = 3
-  | unrefine n == 5 = 1
+  | unrefine (unNumber n) == 1 = 3
+  | unrefine (unNumber n) == 5 = 1
   | otherwise = 2
 
 -- | All of the cards is a list of each card its duplicity times
@@ -157,6 +173,20 @@ discardB c = discardCard c . over #time addTime
 type Deck = [Card]
 
 type CardIx = Int
+
+-- | The number of cards each player starts with in their hand. Dependent
+-- on the number of players.
+startingCardsInHand :: forall p. (Enum p, Bounded p, HasCallStack) => Int
+startingCardsInHand
+  | playerCount > 5 = error "too many players"
+  | playerCount > 3 = 4
+  | playerCount > 0 = 5
+  | otherwise = error "too few players"
+  where
+    playerCount = length [minBound :: p .. maxBound]
+
+allCardIxs :: forall p. (Enum p, Bounded p) => [CardIx]
+allCardIxs = [0 .. startingCardsInHand @p - 1]
 
 -- | A hand is just a list of cards with a couple of invariants, in terms of
 -- gameplay.
@@ -230,6 +260,26 @@ data Information p
   = TookAction p (Action p)
   | CardSatisfies p CardIx (Set Color) (Set Number)
   deriving (Show, Generic)
+
+informationFromHint
+  :: forall p.
+     (Enum p, Bounded p)
+  => p -> Hint -> [Information p]
+informationFromHint p = \case
+  AreColor c cixs ->
+    [ CardSatisfies p cix (singleton c) setAny
+    | cix <- setToList cixs
+    ] ++
+    [ CardSatisfies p cix (setExcept c) setAny
+    | cix <- filter (not . (`elem` cixs)) $ allCardIxs @p
+    ]
+  AreNumber n cixs ->
+    [ CardSatisfies p cix setAny (singleton n)
+    | cix <- setToList cixs
+    ] ++
+    [ CardSatisfies p cix setAny (setExcept n)
+    | cix <- filter (not . (`elem` cixs)) $ allCardIxs @p
+    ]
 
 cardIs :: p -> CardIx -> Card -> Information p
 cardIs p cix c = CardSatisfies p cix color number where
@@ -318,27 +368,17 @@ hint
   :: forall p r.
      ( Members [PlayerIO p, HasGameState p] r
      , Throws '[GameOver] r
+     , Enum p, Bounded p
      )
   => p -> Hint -> Sem r ()
-hint = undefined
-
--- | The number of cards each player starts with in their hand. Dependent
--- on the number of players.
-startingCardsInHand :: HasCallStack => [p] -> Int
-startingCardsInHand ps
-  | playerCount > 5 = error "startingCardsInHand: too many players"
-  | playerCount > 3 = 4
-  | playerCount > 0 = 5
-  | otherwise = error "startingCardsInHand: too few players"
-  where
-    playerCount = length ps
+hint p h = for_ (informationFromHint p h) broadcast
 
 dealHands
   :: forall p. (Ord p, Enum p, Bounded p)
   => Deck -> (Deck, Hands p)
 dealHands startingDeck = (remainingDeck, makePlayerMap (players `zip` hs)) where
   players = [minBound :: p .. maxBound]
-  startingCards = startingCardsInHand [minBound :: p .. maxBound]
+  startingCards = startingCardsInHand @p
   (remainingDeck, hs) = run . runState startingDeck $ playerHands
   playerHands = replicateM (length players) dealHand
   dealHand :: Member (State Deck) r => Sem r Hand
