@@ -217,7 +217,8 @@ data Action p
 
 data Information p
   = TookAction p (Action p)
-  | Drew p CardIx Card
+  | CardSatisfies p CardIx (Set Color) (Set Number)
+  | NotReplaced p CardIx
   deriving (Show, Generic)
 
 data CardDoesNotExist = CardDoesNotExist
