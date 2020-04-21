@@ -223,6 +223,10 @@ data Action p
   deriving (Show, Generic)
 
 data Information p
+  -- it might be desireable to split out TookAction into a separate effect
+  -- and move in a remove from hand info here
+  -- it also might be desirable to give some notice to the player that the
+  -- deck ran out, technically they can figure this out, but eh~
   = TookAction p (Action p)
   | CardSatisfies p CardIx (Set Color) (Set Number)
   deriving (Show, Generic)
