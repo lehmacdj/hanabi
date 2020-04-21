@@ -27,7 +27,7 @@ dependencies:
 - generic-lens
 - containers
 - polysemy
-- polysemy-plugin
+- polysemy-zoo
 
 default-extensions:
 - ConstraintKinds
@@ -51,7 +51,6 @@ default-extensions:
 
 ghc-options:
 - -Wall
-- -fplugin=Polysemy.Plugin
 - -Wno-name-shadowing
 
 library:

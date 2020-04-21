@@ -13,6 +13,7 @@ module MyPrelude
   , isPermutationOf
   , next
   , untilJust
+  , whenJust
   ) where
 
 import qualified Data.Map as Map
@@ -66,3 +67,7 @@ untilJust m = go
     go = do
       x <- m
       maybe go pure x
+
+-- taken from: extra
+whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
+whenJust mg f = maybe (pure ()) f mg

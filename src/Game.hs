@@ -11,6 +11,7 @@ import Refined.Unsafe as Unsafe
 import Data.Generics.Labels ()
 
 import Polysemy.State
+import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
 
 -- | amount of time available to the players
@@ -156,6 +157,12 @@ discardB c = discardCard c . over #time addTime
 type Deck = [Card]
 
 type CardIx = Int
+
+-- | A hand is just a list of cards with a couple of invariants, in terms of
+-- gameplay.
+-- 1. Cards are always inserted at index 0. A corrolary of this is that the
+-- oldest card in a players hand is the card at the greatest index.
+-- 2. startingCardsInHand p - 1 <= length hand <= startingCardsInHand p
 type Hand = [Card]
 
 -- returns an affine traversal (one returning 0 or 1 entries only)
@@ -218,8 +225,12 @@ data Action p
 data Information p
   = TookAction p (Action p)
   | CardSatisfies p CardIx (Set Color) (Set Number)
-  | NotReplaced p CardIx
   deriving (Show, Generic)
+
+cardIs :: p -> CardIx -> Card -> Information p
+cardIs p cix c = CardSatisfies p cix color number where
+  color = singleton (c ^. #color)
+  number = singleton (c ^. #number)
 
 data CardDoesNotExist = CardDoesNotExist
   deriving (Show)
@@ -256,22 +267,24 @@ broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
 -- from the deck. returns Nothing if there are no cards left in the deck
 -- TODO: distribute information about what cards are drawn from the deck
 takeCard
-  :: ( Member (PlayerIO p) r
+  :: forall p r.
+     ( Members [PlayerIO p, HasGameState p] r
      , Throws '[CardDoesNotExist] r
      , Ord p, Enum p, Bounded p
      )
-  => p -> CardIx -> GameState p -> Sem r (Card, GameState p)
-takeCard p cix s = do
+  => p -> CardIx -> Sem r Card
+takeCard p cix = absorbState @(GameState p) $ do
+  -- we need to reference the original state after we modify it so save a copy
+  s <- get @(GameState p)
+  -- this needs to be here and not computed at the end because otherwise we
+  -- throw the exception after modifying state
   card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
-  let
-    updateDeck = #deck .~ drop 1 (view #deck s)
-    updateHand
-      = case s ^? #deck . ix 0 of
-          -- this is gross and should be cleaner, could be cleaner
-          -- if I was smarter
-          Nothing -> over (#hands . handFor p) (deleteAt cix)
-          Just nextCard -> #hands . handFor p . cardFor cix .~ nextCard
-  pure (card, updateHand . updateDeck $ s)
+  _ <- #deck %= drop 1
+  #hands . handFor p %= deleteAt cix
+  whenJust (s ^? #deck . ix 0) $ \nextCard -> do
+    informExcept p $ cardIs p 0 nextCard
+    #hands . handFor p %= (nextCard :)
+  pure card
 
 play
   :: forall p r.
@@ -281,10 +294,10 @@ play
      )
   => p -> CardIx -> Sem r ()
 play p cix = do
+  c <- takeCard p cix
   s <- get @(GameState p)
-  (c, s) <- takeCard p cix s
   s <- justOrThrow GameOver $ mapMOf #board (playB c) s
-  put s
+  put @(GameState p) s
 
 discard
   :: forall p r.
@@ -293,11 +306,9 @@ discard
      , Ord p, Enum p, Bounded p
      )
   => p -> CardIx -> Sem r ()
-discard p cix = do
-  s <- get @(GameState p)
-  (c, s) <- takeCard p cix s
-  s <- pure $ over #board (discardB c) s
-  put s
+discard p cix = absorbState @(GameState p) $ do
+  c <- takeCard p cix
+  #board %= discardB c
 
 hint
   :: forall p r.
