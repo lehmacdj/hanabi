@@ -252,13 +252,48 @@ data Action p
   -- ^ the player specifies the player being given the hint
   deriving (Show, Generic)
 
+-- | the possibilities  of what a card can be in a players hand
+data CardPossibilities = CardPossibilities
+    { colors :: Set Color
+    , numbers :: Set Number
+    }
+    deriving (Show, Generic, Eq, Ord)
+
+instance Semigroup CardPossibilities where
+  cp1 <> cp2 = CardPossibilities
+    (view #colors cp1 `intersect` view #colors cp2)
+    (view #numbers cp1 `intersect` view #numbers cp2)
+
+instance Monoid CardPossibilities where
+  mempty = CardPossibilities setAny setAny
+
+cardIs :: Card -> CardPossibilities
+cardIs c = CardPossibilities color number where
+  color = singleton (c ^. #color)
+  number = singleton (c ^. #number)
+
+cardIsNotColor :: Color -> CardPossibilities
+cardIsNotColor c = CardPossibilities (setExcept c) setAny
+
+cardIsColor :: Color -> CardPossibilities
+cardIsColor c = CardPossibilities (singleton c) setAny
+
+cardIsNumber :: Number -> CardPossibilities
+cardIsNumber n = CardPossibilities setAny (singleton n)
+
+cardIsNotNumber :: Number -> CardPossibilities
+cardIsNotNumber n = CardPossibilities setAny (setExcept n)
+
+-- | indices in HandPossibilities have the same invariants as Hand has
+type HandPossibilities = [CardPossibilities]
+
 data Information p
   -- it might be desireable to split out TookAction into a separate effect
   -- and move in a remove from hand info here
   -- it also might be desirable to give some notice to the player that the
   -- deck ran out, technically they can figure this out, but eh~
   = TookAction p (Action p)
-  | CardSatisfies p CardIx (Set Color) (Set Number)
+  | CardSatisfies p CardIx CardPossibilities
   deriving (Show, Generic)
 
 informationFromHint
@@ -267,24 +302,19 @@ informationFromHint
   => p -> Hint -> [Information p]
 informationFromHint p = \case
   AreColor c cixs ->
-    [ CardSatisfies p cix (singleton c) setAny
+    [ CardSatisfies p cix $ cardIsColor c
     | cix <- setToList cixs
     ] ++
-    [ CardSatisfies p cix (setExcept c) setAny
+    [ CardSatisfies p cix $ cardIsNotColor c
     | cix <- filter (not . (`elem` cixs)) $ allCardIxs @p
     ]
   AreNumber n cixs ->
-    [ CardSatisfies p cix setAny (singleton n)
+    [ CardSatisfies p cix $ cardIsNumber n
     | cix <- setToList cixs
     ] ++
-    [ CardSatisfies p cix setAny (setExcept n)
+    [ CardSatisfies p cix $ cardIsNotNumber n
     | cix <- filter (not . (`elem` cixs)) $ allCardIxs @p
     ]
-
-cardIs :: p -> CardIx -> Card -> Information p
-cardIs p cix c = CardSatisfies p cix color number where
-  color = singleton (c ^. #color)
-  number = singleton (c ^. #number)
 
 data CardDoesNotExist = CardDoesNotExist
   deriving (Show)
@@ -336,7 +366,7 @@ takeCard p cix = absorbState @(GameState p) $ do
   _ <- #deck %= drop 1
   #hands . handFor p %= deleteAt cix
   whenJust (s ^? #deck . ix 0) $ \nextCard -> do
-    informExcept p $ cardIs p 0 nextCard
+    informExcept p $ CardSatisfies p 0 $ cardIs nextCard
     #hands . handFor p %= (nextCard :)
   pure card
 
