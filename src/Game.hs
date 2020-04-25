@@ -259,11 +259,13 @@ data CardPossibilities = CardPossibilities
     }
     deriving (Show, Generic, Eq, Ord)
 
+-- | operation for this instance is intersection or merging of information
 instance Semigroup CardPossibilities where
   cp1 <> cp2 = CardPossibilities
     (view #colors cp1 `intersect` view #colors cp2)
     (view #numbers cp1 `intersect` view #numbers cp2)
 
+-- | unit is Top, i.e. no information
 instance Monoid CardPossibilities where
   mempty = CardPossibilities setAny setAny
 
