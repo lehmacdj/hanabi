@@ -290,11 +290,7 @@ cardIsNotNumber n = CardPossibilities setAny (setExcept n)
 type HandPossibilities = [CardPossibilities]
 
 data Information p
-  -- it might be desireable to split out TookAction into a separate effect
-  -- and move in a remove from hand info here
-  -- it also might be desirable to give some notice to the player that the
-  -- deck ran out, technically they can figure this out, but eh~
-  = TookAction p (Action p)
+  = RemovedFromHand p CardIx
   | CardSatisfies p CardIx CardPossibilities
   deriving (Show, Generic)
 
@@ -367,6 +363,7 @@ takeCard p cix = absorbState @(GameState p) $ do
   card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
   _ <- #deck %= drop 1
   #hands . handFor p %= deleteAt cix
+  broadcast @p $ RemovedFromHand p cix
   whenJust (s ^? #deck . ix 0) $ \nextCard -> do
     informExcept p $ CardSatisfies p 0 $ cardIs nextCard
     #hands . handFor p %= (nextCard :)
@@ -461,7 +458,6 @@ gameLoop currentPlayer = do
     ds = view (#deck . to length) s
     promptCurrentPlayer = prompt currentPlayer b ds
   a <- untilJust (promptCurrentPlayer >>= validateAction)
-  broadcast (TookAction currentPlayer a)
   case a of
     Play cix -> play currentPlayer cix
     Discard cix -> discard currentPlayer cix
