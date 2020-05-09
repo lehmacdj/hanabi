@@ -16,6 +16,7 @@ import Data.Generics.Labels ()
 import Polysemy.State
 import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
+import Polysemy.Output
 
 -- | amount of time available to the players
 type IsTime = And (From 0) (To 8)
@@ -252,6 +253,8 @@ data Action p
   -- ^ the player specifies the player being given the hint
   deriving (Show, Generic)
 
+data Turn p = Turn p (Action p)
+
 -- | the possibilities  of what a card can be in a players hand
 data CardPossibilities = CardPossibilities
     { colors :: Set Color
@@ -445,7 +448,7 @@ validateAction a = do
 
 gameLoop
   :: forall p r.
-     ( Members [PlayerIO p, HasGameState p] r
+     ( Members [PlayerIO p, HasGameState p, Output (Turn p) ] r
      , Throws [CardDoesNotExist, GameOver] r
      , Ord p, Enum p, Bounded p
      )
@@ -458,6 +461,7 @@ gameLoop currentPlayer = do
     ds = view (#deck . to length) s
     promptCurrentPlayer = prompt currentPlayer b ds
   a <- untilJust (promptCurrentPlayer >>= validateAction)
+  output @(Turn p) (Turn currentPlayer a)
   case a of
     Play cix -> play currentPlayer cix
     Discard cix -> discard currentPlayer cix
@@ -468,7 +472,7 @@ gameLoop currentPlayer = do
 runGame
   :: forall p r.
      ( HasCallStack
-     , Member (PlayerIO p) r
+     , Members [PlayerIO p, Output (Turn p)] r
      , Throws '[CardDoesNotExist] r
      , Ord p, Enum p, Bounded p
      )

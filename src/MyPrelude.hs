@@ -6,7 +6,6 @@ module MyPrelude
 
   , HasCallStack
 
-  , mapOfFunction
   , Throws
   , justOrThrow
   , deleteAt
@@ -17,8 +16,6 @@ module MyPrelude
   , setExcept
   , setAny
   ) where
-
-import qualified Data.Map as Map
 
 import ClassyPrelude hiding (catchIO)
 import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, cons)
@@ -46,10 +43,6 @@ justOrThrow :: Throws '[err] r => err -> Maybe a -> Sem r a
 justOrThrow err = \case
   Just x -> pure x
   Nothing -> throw err
-
--- | Contructs a map from a function applied to each given key
-mapOfFunction :: Ord k => [k] -> (k -> v) -> Map k v
-mapOfFunction ks f = Map.fromList (ks `zip` map f ks)
 
 isPermutationOf :: Ord a => [a] -> [a] -> Bool
 isPermutationOf xs ys = sort xs == sort ys
