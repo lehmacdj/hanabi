@@ -297,6 +297,15 @@ data Information p
   | CardSatisfies p CardIx CardPossibilities
   deriving (Show, Generic)
 
+aboutPlayer :: Lens (Information p) (Information q) p q
+aboutPlayer = lens get set where
+  get = \case
+    RemovedFromHand p _ -> p
+    CardSatisfies p _ _ -> p
+  set i q = case i of
+    RemovedFromHand _ cix -> RemovedFromHand q cix
+    CardSatisfies _ cix cps -> CardSatisfies q cix cps
+
 informationFromHint
   :: forall p.
      (Enum p, Bounded p)

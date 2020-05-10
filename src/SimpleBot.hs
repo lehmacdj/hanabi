@@ -19,8 +19,8 @@ data PlayerInformation p = PlayerInformation
 updatePlayerInfo
   :: Ord p => Information p -> PlayerInformation p -> PlayerInformation p
 updatePlayerInfo i pi = case i of
-    RemovedFromHand p cix -> undefined
-    CardSatisfies p cix ci -> undefined
+  RemovedFromHand p cix -> undefined
+  CardSatisfies p cix ci -> undefined
 
 data BotInformation p = BotInformation
   { player :: p
