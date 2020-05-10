@@ -1,33 +1,27 @@
--- | Implements a simple bot that plays with generally good heuristics,
--- that deduced while playing hanabi myself(Devin)
+-- | Implements a simple bot that plays by keeping track of all information
+-- they have been given and making decisions based only on that information.
+-- This bot could also be called egocentric bot, because it only cares about
+-- itself.
 module SimpleBot where
 
 import MyPrelude
 import Game
 
--- | the information that a player can have about the game
-data PlayerInformation p = PlayerInformation
-  { handPossibilities :: HandPossibilities
-  -- ^ the possibilities that this player thinks their hand could be
-  , perspectiveMap :: PlayerMap p (PlayerInformation p)
-  -- ^ the information this player thinks that other players know
-  -- if the info is for player p then the following is an invariant
-  -- > perspectiveMap . at p == id
-  }
-  deriving (Show, Generic)
-
-updatePlayerInfo
-  :: Ord p => Information p -> PlayerInformation p -> PlayerInformation p
-updatePlayerInfo i pi = case i of
-  RemovedFromHand p cix -> undefined
-  CardSatisfies p cix ci -> undefined
-
 data BotInformation p = BotInformation
   { player :: p
-  , playerInformation :: PlayerInformation p
+  , handPossibilities :: HandPossibilities
   }
   deriving (Show, Generic)
+
+updateHandPossibilities
+  :: Ord p => p -> Information p -> HandPossibilities -> HandPossibilities
+updateHandPossibilities p i hp
+  | hasn't (aboutPlayer . only p) i = hp
+  | otherwise = case i of
+    RemovedFromHand _ cix -> mempty : deleteAt cix hp
+    CardSatisfies _ cix ci -> over (ix cix) (<> ci) hp
 
 updateBotInfo
   :: Ord p => Information p -> BotInformation p -> BotInformation p
-updateBotInfo i = over #playerInformation (updatePlayerInfo i)
+updateBotInfo i bi =
+  over #handPossibilities (updateHandPossibilities (view #player bi) i) bi
