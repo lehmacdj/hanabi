@@ -25,7 +25,6 @@ updatePlayerInfo i pi = case i of
 data BotInformation p = BotInformation
   { player :: p
   , playerInformation :: PlayerInformation p
-  , cardsRemaining :: Set Card
   }
   deriving (Show, Generic)
 
