@@ -17,6 +17,9 @@ import Polysemy.State
 import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
 import Polysemy.Output
+import Polysemy.Input
+
+import ConsoleIO
 
 -- | amount of time available to the players
 type IsTime = And (From 0) (To 8)
@@ -334,8 +337,6 @@ data GameOver = GameOver
 -- | Player input/output, the way the game interacts with the players
 data PlayerIO p m a where
   Prompt :: p -- ^ the player to prompt
-         -> Board -- ^ the board at the time of the prompt
-         -> Int -- ^ the number of cards left in the deck at time of prompt
          -> PlayerIO p m (Action p)
   Inform :: p -> Information p -> PlayerIO p m ()
 makeSem ''PlayerIO
@@ -356,6 +357,20 @@ broadcast
      )
   => Information p -> Sem r ()
 broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
+
+-- | takes an input stream of turns, projects out the turns so that
+-- turns are only received in the order that the game desires
+runPlayerIOToInput
+  :: forall p a r.
+    ( Members [Input (Turn p), Output (p, Information p)] r
+    , Eq p
+    )
+  => Sem (PlayerIO p : r) a -> Sem r a
+runPlayerIOToInput = interpret $ \case
+  Prompt p -> untilJust $ do
+    Turn p' action <- input @(Turn p)
+    pure $ guard (p == p') *> Just action
+  Inform p info -> output @(p, Information p) (p, info)
 
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
@@ -466,9 +481,7 @@ gameLoop
 gameLoop currentPlayer = do
   s <- get @(GameState p)
   let
-    b = view #board s
-    ds = view (#deck . to length) s
-    promptCurrentPlayer = prompt currentPlayer b ds
+    promptCurrentPlayer = prompt currentPlayer
   a <- untilJust (promptCurrentPlayer >>= validateAction)
   output @(Turn p) (Turn currentPlayer a)
   case a of
