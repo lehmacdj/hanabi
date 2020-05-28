@@ -28,6 +28,8 @@ dependencies:
 - containers
 - polysemy
 - polysemy-zoo
+- haskeline
+- exceptions
 
 default-extensions:
 - ConstraintKinds
@@ -48,6 +50,7 @@ default-extensions:
 - TypeApplications
 - TypeFamilies
 - TypeOperators
+- AllowAmbiguousTypes
 
 ghc-options:
 - -Wall
@@ -69,7 +72,7 @@ executables:
 
 tests:
   hanabi-test:
-    main:                Spec.hs
+    main:                Driver.hs
     source-dirs:         test
     ghc-options:
     - -threaded
@@ -77,3 +80,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - hanabi
+    - tasty
+    - tasty-hunit
+    - tasty-discover
+    - tasty-quickcheck

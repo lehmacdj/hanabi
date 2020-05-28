@@ -9,6 +9,8 @@ module Game
   ) where
 
 import MyPrelude
+import Text.Read (readsPrec)
+
 import Refined
 import Refined.Unsafe as Unsafe
 import Data.Generics.Labels ()
@@ -18,8 +20,6 @@ import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
 import Polysemy.Output
 import Polysemy.Input
-
-import ConsoleIO
 
 -- | amount of time available to the players
 type IsTime = And (From 0) (To 8)
@@ -55,6 +55,13 @@ makeWrapped ''Number
 
 instance Show Number where
   show = show . unrefine . unNumber
+
+instance Read Number where
+  readsPrec _ n@[_] = toList $ do
+    n <- readMay n
+    n <- refineThrow n
+    pure (Number n, "")
+  readsPrec _ _ = []
 
 instance Enum Number where
   fromEnum = unrefine . unNumber
@@ -96,6 +103,15 @@ instance Show Color where
     Yellow -> "Y"
     White -> "W"
 
+instance Read Color where
+  readsPrec _ s
+    | s == "R" = [(Red, "")]
+    | s == "B" = [(Blue, "")]
+    | s == "G" = [(Green, "")]
+    | s == "Y" = [(Yellow, "")]
+    | s == "W" = [(White, "")]
+    | otherwise = []
+
 -- | needed for Enum Card instance + Bounded Instance
 colorCount :: Int
 colorCount = length [minBound :: Color .. maxBound]
@@ -108,6 +124,13 @@ data Card = Card
 
 instance Show Card where
   show (Card c n) = show c ++ show (unrefine (unNumber n))
+
+instance Read Card where
+  readsPrec _ [c, n] = toList $ do
+    c <- readMay [c]
+    n <- readMay [n]
+    pure (Card c n, "")
+  readsPrec _ _ = []
 
 -- TODO: add test for instance
 instance Enum Card where
@@ -246,7 +269,7 @@ type HasGameState p = State (GameState p)
 data Hint
   = AreColor Color (Set CardIx)
   | AreNumber Number (Set CardIx)
-  deriving (Show, Generic, Eq, Ord)
+  deriving (Show, Read, Generic, Eq, Ord)
 makePrisms ''Hint
 
 data Action p
@@ -254,9 +277,10 @@ data Action p
   | Discard CardIx
   | Hint p Hint
   -- ^ the player specifies the player being given the hint
-  deriving (Show, Generic)
+  deriving (Show, Read, Eq, Generic)
 
 data Turn p = Turn p (Action p)
+  deriving (Show, Read, Eq, Generic)
 
 -- | the possibilities  of what a card can be in a players hand
 data CardPossibilities = CardPossibilities
@@ -360,6 +384,9 @@ broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
 
 -- | takes an input stream of turns, projects out the turns so that
 -- turns are only received in the order that the game desires
+-- For allowing input from several players at the same time, the Input acts
+-- like a channel that receives turns, this makes sure to ignore actions
+-- that are taken out of turn.
 runPlayerIOToInput
   :: forall p a r.
     ( Members [Input (Turn p), Output (p, Information p)] r
@@ -479,7 +506,6 @@ gameLoop
   => p -- ^ the player whose turn it is
   -> Sem r Void
 gameLoop currentPlayer = do
-  s <- get @(GameState p)
   let
     promptCurrentPlayer = prompt currentPlayer
   a <- untilJust (promptCurrentPlayer >>= validateAction)
