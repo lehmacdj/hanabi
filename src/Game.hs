@@ -520,12 +520,16 @@ gameLoop currentPlayer = do
 runGame
   :: forall p r.
      ( HasCallStack
-     , Members [PlayerIO p, Output (Turn p)] r
+     , Members [PlayerIO p, Output (Turn p), HasGameState p] r
      , Throws '[CardDoesNotExist] r
      , Ord p, Enum p, Bounded p
      )
   => Deck -- ^ must be a permutation of the full deck
-  -> Sem r Fireworks -- ^ result is the fireworks produced by the game
+  -> ( GameState p
+     -- ^ the game state for interpreting HasGameState with
+     , Sem r Fireworks
+     -- ^ result is the fireworks produced by the game
+     )
 runGame shuffledDeck =
   let
     _players = [minBound..maxBound]
@@ -537,10 +541,7 @@ runGame shuffledDeck =
     checkedLoop
       | not startingDeckPre = error startingDeckMsg
       | otherwise = gameLoop @p @(Error GameOver : State (GameState p) : r)
-   in fmap (view (_1 . #board . #fireworks))
-    . runState startingState
-    . runError'
-    $ checkedLoop (minBound @p)
+   in (startingState,) . runError' $ checkedLoop (minBound @p)
     where
       runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
       runError' = fmap (either id absurd) . runError

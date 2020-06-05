@@ -52,6 +52,7 @@ default-extensions:
 - TypeFamilies
 - TypeOperators
 - AllowAmbiguousTypes
+- TupleSections
 
 ghc-options:
 - -Wall
