@@ -387,13 +387,13 @@ broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
 -- For allowing input from several players at the same time, the Input acts
 -- like a channel that receives turns, this makes sure to ignore actions
 -- that are taken out of turn.
-runPlayerIOToInput
+runPlayerIOToInputOutput
   :: forall p a r.
     ( Members [Input (Turn p), Output (p, Information p)] r
     , Eq p
     )
   => Sem (PlayerIO p : r) a -> Sem r a
-runPlayerIOToInput = interpret $ \case
+runPlayerIOToInputOutput = interpret $ \case
   Prompt p -> untilJust $ do
     Turn p' action <- input @(Turn p)
     pure $ guard (p == p') *> Just action
