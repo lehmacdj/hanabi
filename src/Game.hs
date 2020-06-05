@@ -269,7 +269,7 @@ type HasGameState p = State (GameState p)
 data Hint
   = AreColor Color (Set CardIx)
   | AreNumber Number (Set CardIx)
-  deriving (Show, Read, Generic, Eq, Ord)
+  deriving (Show, Generic, Eq, Ord)
 makePrisms ''Hint
 
 data Action p
@@ -277,10 +277,10 @@ data Action p
   | Discard CardIx
   | Hint p Hint
   -- ^ the player specifies the player being given the hint
-  deriving (Show, Read, Eq, Generic)
+  deriving (Show, Eq, Generic)
 
 data Turn p = Turn p (Action p)
-  deriving (Show, Read, Eq, Generic)
+  deriving (Show, Eq, Generic)
 
 -- | the possibilities  of what a card can be in a players hand
 data CardPossibilities = CardPossibilities

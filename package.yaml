@@ -30,6 +30,7 @@ dependencies:
 - polysemy-zoo
 - haskeline
 - exceptions
+- megaparsec
 
 default-extensions:
 - ConstraintKinds
