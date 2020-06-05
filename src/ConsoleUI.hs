@@ -40,13 +40,13 @@ outputTurnToConsoleIO
   :: forall p r a. (Show p, Members [ConsoleIO, Output (Turn p)] r)
   => Sem r a -> Sem r a
 outputTurnToConsoleIO = intercept @(Output (Turn p)) $ \case
-  Output (Turn p action) -> writeln ("everyone> " ++ show p ++ " did " ++ show action)
+  Output (Turn p action) -> writeln ("<everyone> " ++ show p ++ " did " ++ show action)
 
 outputPrivateInfoToConsoleIO
   :: forall p r a. (Show p, Members [ConsoleIO, Output (p, Information p)] r)
   => Sem r a -> Sem r a
 outputPrivateInfoToConsoleIO = intercept @(Output (p, Information p)) $ \case
-  Output (p, info) -> writeln (show p ++ "> " ++ show info)
+  Output (p, info) -> writeln ("<" ++ show p ++ "> " ++ show info)
 
 data Command p
   = Quit
@@ -96,10 +96,21 @@ pAction = lexeme . choice $
   ]
 
 pCommand :: (Show p, Enum p, Bounded p) => Parser (Command p)
-pCommand = choice
+pCommand = lexeme . choice $
   [ symbol ":q" $> Quit
   , fmap TakeTurn $ Turn <$> pPlayer <*> pAction
   ]
 
-getInputCommandFromConsoleIO :: ()
-getInputCommandFromConsoleIO = ()
+getInputCommandFromConsoleIO
+  :: forall p r a.
+    ( Member ConsoleIO r
+    , Show p, Enum p, Bounded p
+    )
+  => Sem (Input (Command p) : r) a -> Sem r a
+getInputCommandFromConsoleIO = interpret (\Input -> go) where
+  go :: Sem r (Command p)
+  go = do
+    inputLine <- untilJust getInputLine
+    case parse (pCommand <* eof) "<interactive>" inputLine of
+      Left e -> writeln (errorBundlePretty e) >> go
+      Right command -> pure command
