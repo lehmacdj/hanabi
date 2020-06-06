@@ -15,6 +15,7 @@ module MyPrelude
   , whenJust
   , setExcept
   , setAny
+  , codiagonal
   ) where
 
 import ClassyPrelude hiding (catch, catchIO)
@@ -72,3 +73,7 @@ setExcept x = setAny `difference` singleton x
 
 setAny :: (Enum a, Bounded a, Ord a) => Set a
 setAny = setFromList [minBound .. maxBound]
+
+codiagonal :: Either a a -> a
+codiagonal (Left x) = x
+codiagonal (Right x) = x
