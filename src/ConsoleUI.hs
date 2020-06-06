@@ -126,5 +126,5 @@ interpretCommand
 interpretCommand = runInputSem $ do
   command <- input @(Command p)
   case command of
-    Quit -> throw @GameOver GameOver
+    Quit -> throw GameOver
     TakeTurn t -> pure t
