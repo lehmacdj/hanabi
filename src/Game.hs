@@ -516,7 +516,19 @@ gameLoop currentPlayer = do
     Hint p h -> hint p h
   gameLoop (next currentPlayer)
 
--- | Does precondition verification + sets up GameState/interprets HasGameState
+-- | A deck is only valid if it is a permutation of all of the cards
+startingDeckValid :: Deck -> Bool
+startingDeckValid = (`isPermutationOf` allCards)
+
+startingStateFromDeck
+  :: forall p.
+    ( Ord p, Enum p, Bounded p
+    )
+  => Deck -> GameState p
+startingStateFromDeck deck =
+  GameState startingBoard startingDeck startingHands where
+    (startingDeck, startingHands) = dealHands @p deck
+
 runGame
   :: forall p r.
      ( HasCallStack
@@ -524,24 +536,9 @@ runGame
      , Throws '[CardDoesNotExist] r
      , Ord p, Enum p, Bounded p
      )
-  => Deck -- ^ must be a permutation of the full deck
-  -> ( GameState p
-     -- ^ the game state for interpreting HasGameState with
-     , Sem r Fireworks
-     -- ^ result is the fireworks produced by the game
-     )
-runGame shuffledDeck =
-  let
-    _players = [minBound..maxBound]
-    (startingDeck, startingHands) = dealHands @p shuffledDeck
-    startingState = GameState startingBoard startingDeck startingHands
-
-    startingDeckMsg = "startingDeck must be a permutation of allCards"
-    startingDeckPre = startingDeck `isPermutationOf` allCards
-    checkedLoop
-      | not startingDeckPre = error startingDeckMsg
-      | otherwise = gameLoop @p @(Error GameOver : State (GameState p) : r)
-   in (startingState,) . runError' $ checkedLoop (minBound @p)
-    where
-      runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
-      runError' = fmap (either id absurd) . runError
+  => GameState p
+  -> Sem (Error GameOver : HasGameState p : r) Void
+  -> Sem r (GameState p) -- ^ result is the fireworks produced by the game
+runGame s = fmap fst . runState s . runError' where
+  runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
+  runError' = fmap (either id absurd) . runError
