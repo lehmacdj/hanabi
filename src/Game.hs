@@ -132,7 +132,6 @@ instance Read Card where
     pure (Card c n, "")
   readsPrec _ _ = []
 
--- TODO: add test for instance
 instance Enum Card where
   fromEnum (Card c n)  = colorCount * pred (unrefine (unNumber n)) + fromEnum c
   toEnum = helper where
@@ -142,7 +141,6 @@ instance Enum Card where
         (Nothing, _) -> error "out of bounds index for Enum Card"
         (Just n, c) -> Card (toEnum c) n
 
--- TODO: add test for instance
 instance Bounded Card where
   minBound = toEnum 0
   maxBound = toEnum $ (numberCount - 1) * colorCount + (colorCount - 1)
