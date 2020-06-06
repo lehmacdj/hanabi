@@ -12,6 +12,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.Error
 
 data PError
   = OutOfBoundsNumber Int
@@ -107,10 +108,23 @@ getInputCommandFromConsoleIO
     , Show p, Enum p, Bounded p
     )
   => Sem (Input (Command p) : r) a -> Sem r a
-getInputCommandFromConsoleIO = interpret (\Input -> go) where
+getInputCommandFromConsoleIO = runInputSem go where
   go :: Sem r (Command p)
   go = do
     inputLine <- untilJust getInputLine
     case parse (pCommand <* eof) "<interactive>" inputLine of
       Left e -> writeln (errorBundlePretty e) >> go
       Right command -> pure command
+
+interpretCommand
+  :: forall p r a.
+    ( Members [Input (Command p), HasGameState p] r
+    , Throws '[GameOver] r
+    , Show p, Enum p, Bounded p
+    )
+  => Sem (Input (Turn p) : r) a -> Sem r a
+interpretCommand = runInputSem $ do
+  command <- input @(Command p)
+  case command of
+    Quit -> throw @GameOver GameOver
+    TakeTurn t -> pure t
