@@ -17,7 +17,7 @@ module MyPrelude
   , setAny
   ) where
 
-import ClassyPrelude hiding (catchIO)
+import ClassyPrelude hiding (catch, catchIO)
 import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, cons)
 
 import Data.Void
