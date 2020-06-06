@@ -16,6 +16,7 @@ module MyPrelude
   , setExcept
   , setAny
   , codiagonal
+  , runError'
   ) where
 
 import ClassyPrelude hiding (catch, catchIO)
@@ -24,7 +25,7 @@ import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, con
 import Data.Void
 
 import Polysemy
-import Polysemy.Error (Error, throw)
+import Polysemy.Error (Error, throw, runError)
 
 import GHC.Stack (HasCallStack)
 
@@ -77,3 +78,6 @@ setAny = setFromList [minBound .. maxBound]
 codiagonal :: Either a a -> a
 codiagonal (Left x) = x
 codiagonal (Right x) = x
+
+runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
+runError' = fmap (either id absurd) . runError
