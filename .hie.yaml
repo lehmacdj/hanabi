@@ -1,0 +1,13 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "hanabi:lib"
+
+    - path: "./app/Main.hs"
+      component: "hanabi:exe:hanabi-exe"
+
+    - path: "./app/Paths_hanabi.hs"
+      component: "hanabi:exe:hanabi-exe"
+
+    - path: "./test"
+      component: "hanabi:test:hanabi-test"
