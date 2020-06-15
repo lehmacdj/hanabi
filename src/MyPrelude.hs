@@ -109,6 +109,7 @@ raiseDeepUnder2 = hoistSem $ hoist raiseDeepUnder2 . weakenDeepUnder2 where
   weakenDeepUnder2 (Union (SS SZ) a) = Union (SS SZ) a
   weakenDeepUnder2 (Union (SS (SS n)) a) = Union (SS (SS (SS (SS n)))) a
 
+-- | Input effects may be mapped contravariantly
 contramapInput
   :: forall x y r a.
      ( Member (Input y) r
