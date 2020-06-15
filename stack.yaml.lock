@@ -19,6 +19,20 @@ packages:
   original:
     hackage: prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
 - completed:
+    hackage: polysemy-1.2.3.0@sha256:2345b6b76adc8f91fc88251129deff584cebcd07e952dd66aa512c69949df537,6097
+    pantry-tree:
+      size: 3625
+      sha256: 8d327bc0dcb178112b933626a33200e8714712a77eb348271fdfbdd326b03fec
+  original:
+    hackage: polysemy-1.2.3.0@sha256:2345b6b76adc8f91fc88251129deff584cebcd07e952dd66aa512c69949df537,6097
+- completed:
+    hackage: polysemy-zoo-0.7.0.0@sha256:e98ba9620128df8f8aea6adec5a0e324103324a2d2368930a2e214a2c334551b,3900
+    pantry-tree:
+      size: 3049
+      sha256: 5cc724e74ed56436891e15ce23b82ce432f9e9f735c5111847988f8854009815
+  original:
+    hackage: polysemy-zoo-0.7.0.0
+- completed:
     hackage: intero-0.1.40@sha256:341c4559929723045a418f5da3ce448557916b156a32b6fb35f6ade3800321d9,1879
     pantry-tree:
       size: 1131
