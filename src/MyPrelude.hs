@@ -20,10 +20,12 @@ module MyPrelude
   , setAny
   , codiagonal
   , runError'
+  , raiseDeepUnder
+  , raiseDeepUnder2
   ) where
 
 import ClassyPrelude hiding (catch, catchIO)
-import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, cons)
+import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, cons, transform, rewrite)
 
 import Data.Void
 
@@ -33,6 +35,8 @@ import Fcf.Data.List (type (++))
 
 import Polysemy
 import Polysemy.Error (Error, throw, runError)
+import Polysemy.Internal
+import Polysemy.Internal.Union
 
 import GHC.Stack (HasCallStack)
 
@@ -88,3 +92,17 @@ codiagonal (Right x) = x
 
 runError' :: forall e r. Sem (Error e : r) Void -> Sem r e
 runError' = fmap (either id absurd) . runError
+
+raiseDeepUnder :: forall e3 e1 e2 r a. Sem (e1 : e2 : r) a -> Sem (e1 : e2 : e3 : r) a
+raiseDeepUnder = hoistSem $ hoist raiseDeepUnder . weakenDeepUnder where
+  weakenDeepUnder :: forall m x. Union (e1 : e2 : r) m x -> Union (e1 : e2 : e3 : r) m x
+  weakenDeepUnder (Union SZ a) = Union SZ a
+  weakenDeepUnder (Union (SS SZ) a) = Union (SS SZ) a
+  weakenDeepUnder (Union (SS (SS n)) a) = Union (SS (SS (SS n))) a
+
+raiseDeepUnder2 :: forall e3 e4 e1 e2 r a. Sem (e1 : e2 : r) a -> Sem (e1 : e2 : e3 : e4 : r) a
+raiseDeepUnder2 = hoistSem $ hoist raiseDeepUnder2 . weakenDeepUnder2 where
+  weakenDeepUnder2 :: forall m x. Union (e1 : e2 : r) m x -> Union (e1 : e2 : e3 : e4 : r) m x
+  weakenDeepUnder2 (Union SZ a) = Union SZ a
+  weakenDeepUnder2 (Union (SS SZ) a) = Union (SS SZ) a
+  weakenDeepUnder2 (Union (SS (SS n)) a) = Union (SS (SS (SS (SS n)))) a
