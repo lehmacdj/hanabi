@@ -3,6 +3,8 @@ module MyPrelude
   , module Control.Lens
   , module Data.Void
   , module Polysemy
+
+  , module Fcf.Core
   , type (++)
 
   , HasCallStack
@@ -25,6 +27,7 @@ import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, con
 
 import Data.Void
 
+import Fcf.Core
 -- | needed for having more generic handlers
 import Fcf.Data.List (type (++))
 
