@@ -22,6 +22,7 @@ module MyPrelude
   , runError'
   , raiseDeepUnder
   , raiseDeepUnder2
+  , contramapInput
   ) where
 
 import ClassyPrelude hiding (catch, catchIO)
@@ -35,6 +36,7 @@ import Fcf.Data.List (type (++))
 
 import Polysemy
 import Polysemy.Error (Error, throw, runError)
+import Polysemy.Input (Input, input, runInputSem)
 import Polysemy.Internal
 import Polysemy.Internal.Union
 
@@ -106,3 +108,10 @@ raiseDeepUnder2 = hoistSem $ hoist raiseDeepUnder2 . weakenDeepUnder2 where
   weakenDeepUnder2 (Union SZ a) = Union SZ a
   weakenDeepUnder2 (Union (SS SZ) a) = Union (SS SZ) a
   weakenDeepUnder2 (Union (SS (SS n)) a) = Union (SS (SS (SS (SS n)))) a
+
+contramapInput
+  :: forall x y r a.
+     ( Member (Input y) r
+     )
+  => (y -> Sem r x) -> Sem (Input x : r) a -> Sem r a
+contramapInput f = runInputSem $ input @y >>= f
