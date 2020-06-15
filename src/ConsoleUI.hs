@@ -118,7 +118,7 @@ getInputCommandFromConsoleIO = runInputSem go where
 
 interpretCommand
   :: forall p r a.
-    ( Members [Input (Command p), HasGameState p] r
+    ( Members '[Input (Command p)] r
     , Throws '[GameOver] r
     , Show p, Enum p, Bounded p
     )
@@ -128,3 +128,24 @@ interpretCommand = runInputSem $ do
   case command of
     Quit -> throw GameOver
     TakeTurn t -> pure t
+
+runPlayerIOAsConsoleUI
+  :: forall p r a.
+     ( Show p, Eq p, Enum p, Bounded p
+     , Members [ConsoleIO, Error GameOver] r
+     )
+  => Sem (PlayerIO p : r) a
+  -> Sem r a
+runPlayerIOAsConsoleUI =
+  subsume
+  . subsume
+  . ignoreOutput @(p, Information p)
+  . outputPrivateInfoToConsoleIO @p
+  . getInputCommandFromConsoleIO
+  . interpretCommand
+  . raiseUnder @(Input (Command p))
+  . runPlayerIOToInputOutput @p
+  . raiseUnder @(Input (Turn p))
+  . raiseUnder @(Output (p, Information p))
+  . raiseUnder @(Error GameOver)
+  . raiseUnder @ConsoleIO
