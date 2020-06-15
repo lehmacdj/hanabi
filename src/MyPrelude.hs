@@ -3,6 +3,7 @@ module MyPrelude
   , module Control.Lens
   , module Data.Void
   , module Polysemy
+  , type (++)
 
   , HasCallStack
 
@@ -23,6 +24,9 @@ import ClassyPrelude hiding (catch, catchIO)
 import Control.Lens hiding (snoc, Index, (<.>), (<|), index, uncons, unsnoc, cons)
 
 import Data.Void
+
+-- | needed for having more generic handlers
+import Fcf.Data.List (type (++))
 
 import Polysemy
 import Polysemy.Error (Error, throw, runError)
