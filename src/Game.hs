@@ -224,6 +224,22 @@ type Hand = [Card]
 cardFor :: Int -> Traversal' Hand Card
 cardFor = ix
 
+-- perhaps it makes sense to implement something like this eventually?
+-- deemed not worth it for now leaving here in case I want to pick up where I
+-- left up at some point in the future
+--
+-- -- | Relatively adhoc typeclass encapsulating some utilities for dealing with
+-- -- players + flagging a type as intended for use as a player.
+-- -- Player types are defined for different player counts in their own modules
+-- class (Show p, Ord p) => Player p where
+--   firstPlayer :: p
+--   firstPlayer = head players
+--   nextPlayer :: p -> p
+--   nextPlayer =
+--   players :: [p]
+--   {-# MINIMAL players | firstPlayer, nextPlayer #-}
+
+
 -- | invariant: Map is total, every entry has a value
 -- makePlayerMap checks this invariant; use it over the Hands construtor
 -- generally p needs to be Enum, Bounded, and Ord
