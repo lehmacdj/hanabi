@@ -31,6 +31,7 @@ dependencies:
 - haskeline
 - exceptions
 - megaparsec
+- first-class-families
 
 default-extensions:
 - ConstraintKinds
