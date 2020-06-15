@@ -116,18 +116,17 @@ getInputCommandFromConsoleIO = runInputSem go where
       Left e -> writeln (errorBundlePretty e) >> go
       Right command -> pure command
 
+-- | interpreting a command returns the turn that the command produces if it
+-- is one and otherwise executes the command in the effect context
 interpretCommand
-  :: forall p r a.
-    ( Members '[Input (Command p)] r
-    , Throws '[GameOver] r
+  :: forall p r.
+    ( Throws '[GameOver] r
     , Show p, Enum p, Bounded p
     )
-  => Sem (Input (Turn p) : r) a -> Sem r a
-interpretCommand = runInputSem $ do
-  command <- input @(Command p)
-  case command of
-    Quit -> throw GameOver
-    TakeTurn t -> pure t
+  => Command p -> Sem r (Turn p)
+interpretCommand = \case
+  Quit -> throw GameOver
+  TakeTurn t -> pure t
 
 runPlayerIOAsConsoleUI
   :: forall p r a.
@@ -142,10 +141,13 @@ runPlayerIOAsConsoleUI =
   . ignoreOutput @(p, Information p)
   . outputPrivateInfoToConsoleIO @p
   . getInputCommandFromConsoleIO
-  . interpretCommand
+  . contramapInput interpretCommand
+  -- effect for interpret command to interpret in terms of
   . raiseUnder @(Input (Command p))
   . runPlayerIOToInputOutput @p
+  -- effects for runPlayerIOToInputOutput to interpret in terms of
   . raiseUnder @(Input (Turn p))
   . raiseUnder @(Output (p, Information p))
+  -- final effects we want to interpret in terms of
   . raiseUnder @(Error GameOver)
   . raiseUnder @ConsoleIO
