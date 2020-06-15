@@ -530,7 +530,7 @@ startingStateFromDeck deck =
 runGame
   :: forall p r.
      ( HasCallStack
-     , Members [PlayerIO p, Output (Turn p), HasGameState p] r
+     , Members [PlayerIO p, Output (Turn p)] r
      , Throws '[CardDoesNotExist] r
      , Ord p, Enum p, Bounded p
      )
