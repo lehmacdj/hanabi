@@ -63,9 +63,9 @@ library:
   source-dirs: src
 
 executables:
-  hanabi-exe:
+  hanabi-console:
     main:                Main.hs
-    source-dirs:         app
+    source-dirs:         app/console
     ghc-options:
     - -threaded
     - -rtsopts
