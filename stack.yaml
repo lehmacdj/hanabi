@@ -44,7 +44,8 @@ extra-deps:
 - refined-0.4.4@sha256:c387bd725ecb18f8ec93b2271b53604f2ed70f7e2fc548dc5f2f1991d4cd9ee0,2776
 - prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
 - polysemy-1.2.3.0@sha256:2345b6b76adc8f91fc88251129deff584cebcd07e952dd66aa512c69949df537,6097
-- polysemy-zoo-0.7.0.0
+- polysemy-zoo-0.6.0.1
+- polysemy-RandomFu-0.4.0.0
 - intero-0.1.40
 
 # Override default flag values for local packages and extra-deps

@@ -32,6 +32,7 @@ dependencies:
 - exceptions
 - megaparsec
 - first-class-families
+- polysemy-RandomFu
 
 default-extensions:
 - ConstraintKinds
