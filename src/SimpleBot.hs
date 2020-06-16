@@ -4,24 +4,27 @@
 -- itself.
 module SimpleBot where
 
-import MyPrelude
 import Game
+import MyPrelude
 
 data BotInformation p = BotInformation
-  { player :: p
-  , handPossibilities :: HandPossibilities
+  { player :: p,
+    handPossibilities :: HandPossibilities
   }
   deriving (Show, Generic)
 
-updateHandPossibilities
-  :: Ord p => p -> Information p -> HandPossibilities -> HandPossibilities
+updateHandPossibilities ::
+  Ord p => p -> Information p -> HandPossibilities -> HandPossibilities
 updateHandPossibilities p i hp
   | hasn't (aboutPlayer . only p) i = hp
   | otherwise = case i of
     RemovedFromHand _ cix -> mempty : deleteAt cix hp
     CardSatisfies _ cix ci -> over (ix cix) (<> ci) hp
 
-updateBotInfo
-  :: Ord p => Information p -> BotInformation p -> BotInformation p
+updateBotInfo ::
+  Ord p =>
+  Information p ->
+  BotInformation p ->
+  BotInformation p
 updateBotInfo i bi =
   over #handPossibilities (updateHandPossibilities (view #player bi) i) bi

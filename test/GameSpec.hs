@@ -2,9 +2,8 @@
 
 module GameSpec where
 
-import MyPrelude
 import Game
-
+import MyPrelude
 import Test.Tasty.HUnit
 
 unit_readShowAllCards =
