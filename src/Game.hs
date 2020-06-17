@@ -9,11 +9,13 @@ module Game
 where
 
 import Data.Generics.Labels ()
+import Data.Random
 import MyPrelude
 import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
 import Polysemy.Input
 import Polysemy.Output
+import Polysemy.RandomFu
 import Polysemy.State
 import Refined
 import Refined.Unsafe as Unsafe
@@ -596,11 +598,24 @@ startingStateFromDeck deck =
   where
     (startingDeck, startingHands) = dealHands @p deck
 
--- generateStartingState
---   :: forall p.
---      ( Ord p, Enum p, Bounded p
---      )
---   =>
+startingDeck :: RVar Deck
+startingDeck = shuffle allCards
+
+startingState ::
+  forall p.
+  (Ord p, Enum p, Bounded p) =>
+  RVar (GameState p)
+startingState = startingStateFromDeck <$> startingDeck
+
+generateStartingState ::
+  forall p r.
+  ( Ord p,
+    Enum p,
+    Bounded p,
+    Member RandomFu r
+  ) =>
+  Sem r (GameState p)
+generateStartingState = sampleRVar startingState
 
 runGame ::
   forall p r.
