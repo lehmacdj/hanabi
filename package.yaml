@@ -33,6 +33,7 @@ dependencies:
 - megaparsec
 - first-class-families
 - polysemy-RandomFu
+- random-fu
 
 default-extensions:
 - ConstraintKinds
