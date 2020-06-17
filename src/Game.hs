@@ -15,7 +15,6 @@ import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
 import Polysemy.Input
 import Polysemy.Output
-import Polysemy.RandomFu
 import Polysemy.State
 import Refined
 import Refined.Unsafe as Unsafe
@@ -607,21 +606,9 @@ startingState ::
   RVar (GameState p)
 startingState = startingStateFromDeck <$> startingDeck
 
-generateStartingState ::
-  forall p r.
-  ( Ord p,
-    Enum p,
-    Bounded p,
-    Member RandomFu r
-  ) =>
-  Sem r (GameState p)
-generateStartingState = sampleRVar startingState
-
 runGame ::
   forall p r.
   ( HasCallStack,
-    Members [PlayerIO p, Output (Turn p)] r,
-    Throws '[CardDoesNotExist] r,
     Ord p,
     Enum p,
     Bounded p
