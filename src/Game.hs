@@ -216,6 +216,11 @@ startingCardsInHand
   where
     playerCount = length [minBound :: p .. maxBound]
 
+mkCardIx :: forall p. (Enum p, Bounded p) => Int -> Maybe CardIx
+mkCardIx x
+  | x >= 0 && x < startingCardsInHand @p = Just x
+  | otherwise = Nothing
+
 allCardIxs :: forall p. (Enum p, Bounded p) => [CardIx]
 allCardIxs = [0 .. startingCardsInHand @p - 1]
 
@@ -297,6 +302,10 @@ data Hint
   deriving (Show, Generic, Eq, Ord)
 
 makePrisms ''Hint
+
+-- TODO: implement a meaningful difference between RawAction and Action
+-- specifically we would like to be "parsing not validating" in validateAction
+type RawAction p = Action p
 
 data Action p
   = Play CardIx
@@ -395,7 +404,7 @@ data PlayerIO p m a where
   Prompt ::
     -- | the player to prompt
     p ->
-    PlayerIO p m (Action p)
+    PlayerIO p m (RawAction p)
   Inform :: p -> Information p -> PlayerIO p m ()
 
 makeSem ''PlayerIO
@@ -542,6 +551,12 @@ hintIsValidFor hint hand =
         AreColor c ixs -> testPos c #color ixs && testNeg c #color ixs
         AreNumber n ixs -> testPos n #number ixs && testNeg n #number ixs
 
+-- | TODO: add more information to these hints to enable making stuff more user
+-- friendly in the future
+data ActionValidationError
+  = InvalidHint
+  | CardIxOutOfBounds
+
 validateAction ::
   forall p r.
   ( Member (HasGameState p) r,
@@ -549,15 +564,16 @@ validateAction ::
     Bounded p,
     Ord p
   ) =>
-  Action p ->
-  Sem r (Maybe (Action p))
+  RawAction p ->
+  Sem r (Either ActionValidationError (Action p))
 validateAction a = do
   hs <- view #hands <$> get @(GameState p)
   pure $ case a of
     a'@(Hint p hint)
-      | hint `hintIsValidFor` view (handFor p) hs -> Just a'
-      | otherwise -> Nothing
-    a' -> Just a'
+      | hint `hintIsValidFor` view (handFor p) hs -> Right a'
+      | otherwise -> Left InvalidHint
+    (Play cix) -> Play <$> maybeToRight CardIxOutOfBounds (mkCardIx @p cix)
+    (Discard cix) -> Discard <$> maybeToRight CardIxOutOfBounds (mkCardIx @p cix)
 
 gameLoop ::
   forall p r.
@@ -571,7 +587,7 @@ gameLoop ::
   p ->
   Sem r Void
 gameLoop currentPlayer = do
-  a <- untilJust (prompt currentPlayer >>= validateAction)
+  a <- untilJust (prompt currentPlayer >>= fmap rightToMaybe . validateAction)
   output @(Turn p) (Turn currentPlayer a)
   case a of
     Play cix -> play currentPlayer cix
