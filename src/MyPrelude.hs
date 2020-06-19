@@ -20,6 +20,8 @@ module MyPrelude
     raiseDeepUnder,
     raiseDeepUnder2,
     contramapInput,
+    maybeToRight,
+    rightToMaybe,
   )
 where
 
@@ -118,3 +120,7 @@ contramapInput f = runInputSem $ input @y >>= f
 maybeToRight :: e -> Maybe a -> Either e a
 maybeToRight e Nothing = Left e
 maybeToRight _ (Just x) = Right x
+
+rightToMaybe :: Either e a -> Maybe a
+rightToMaybe (Right x) = Just x
+rightToMaybe _ = Nothing
