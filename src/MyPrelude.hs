@@ -113,3 +113,8 @@ contramapInput ::
   Sem (Input x : r) a ->
   Sem r a
 contramapInput f = runInputSem $ input @y >>= f
+
+-- | credit to either/relude package for the name
+maybeToRight :: e -> Maybe a -> Either e a
+maybeToRight e Nothing = Left e
+maybeToRight _ (Just x) = Right x
