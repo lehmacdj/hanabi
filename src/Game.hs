@@ -571,8 +571,7 @@ gameLoop ::
   p ->
   Sem r Void
 gameLoop currentPlayer = do
-  let promptCurrentPlayer = prompt currentPlayer
-  a <- untilJust (promptCurrentPlayer >>= validateAction)
+  a <- untilJust (prompt currentPlayer >>= validateAction)
   output @(Turn p) (Turn currentPlayer a)
   case a of
     Play cix -> play currentPlayer cix
