@@ -8,6 +8,7 @@ import Game
 import MyPrelude
 import Polysemy.Error
 import Polysemy.Output
+import Refined
 import System.Console.Haskeline
 import ThreePlayer
 
@@ -16,7 +17,7 @@ printEndgameResult state = do
   writeln "The game has ended!"
   writeln "Your score is:"
   for_ (state ^@.. #board . #fireworks . #underlyingMap . itraversed) $
-    \(c, n) -> writeln $ show c ++ " => " ++ show n
+    \(c, n) -> writeln $ show c ++ " => " ++ show (unrefine n)
 
 handleIndexError ::
   Member ConsoleIO r => Sem (Error CardDoesNotExist : r) () -> Sem r ()
