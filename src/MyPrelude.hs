@@ -25,8 +25,8 @@ module MyPrelude
   )
 where
 
-import ClassyPrelude hiding (catch, catchIO)
-import Control.Lens hiding (Index, cons, index, rewrite, snoc, transform, uncons, unsnoc, (<.>), (<|))
+import ClassyPrelude hiding (catch, catchIO, (<.>))
+import Control.Lens hiding (Index, cons, index, rewrite, snoc, transform, uncons, unsnoc, (<|))
 import Data.Void
 import Fcf.Core
 import Fcf.Data.List (type (++))

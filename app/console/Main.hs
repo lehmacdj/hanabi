@@ -57,4 +57,4 @@ playGame startingState game =
 main :: IO ()
 main = do
   startingState <- sample startingState
-  playGame @Player startingState (gameLoop @Player minBound)
+  playGame @Player startingState (fullGameLoop @Player)

@@ -595,6 +595,22 @@ gameLoop currentPlayer = do
     Hint p h -> hint p h
   gameLoop (next currentPlayer)
 
+-- | takes care of giving info about initial cards to players
+fullGameLoop ::
+  forall p r.
+  ( Members [PlayerIO p, HasGameState p, Output (Turn p)] r,
+    Throws [CardDoesNotExist, GameOver] r,
+    Ord p,
+    Enum p,
+    Bounded p
+  ) =>
+  Sem r Void
+fullGameLoop = do
+  state <- get @(GameState p)
+  for_ (state ^@.. #hands . #underlyingMap . (itraversed <.> itraversed)) $
+    \((p, cix), c) -> informExcept p $ CardSatisfies p cix $ cardIs c
+  gameLoop @p minBound
+
 -- | A deck is only valid if it is a permutation of all of the cards
 startingDeckValid :: Deck -> Bool
 startingDeckValid = (`isPermutationOf` allCards)
