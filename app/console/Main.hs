@@ -15,7 +15,12 @@ import ThreePlayer
 printEndgameResult :: Member ConsoleIO r => GameState p -> Sem r ()
 printEndgameResult state = do
   writeln "The game has ended!"
-  writeln "Your score is:"
+  let totalScore =
+        sumOf
+          (#board . #fireworks . #underlyingMap . traverse . to unrefine)
+          state
+  writeln $ "Your total score is: " ++ show totalScore
+  writeln "And you played cards:"
   for_ (state ^@.. #board . #fireworks . #underlyingMap . itraversed) $
     \(c, n) -> writeln $ show c ++ " => " ++ show (unrefine n)
 
