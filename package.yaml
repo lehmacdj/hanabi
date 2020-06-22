@@ -22,20 +22,24 @@ description:         Please see the README on GitHub at <https://github.com/lehm
 dependencies:
 - base >= 4.7 && < 5
 - classy-prelude
-- lens
-- refined
-- generic-lens
 - containers
-- polysemy
-- polysemy-zoo
-- haskeline
 - exceptions
-- megaparsec
 - first-class-families
+- generic-lens
+- haskeline
+- lens
+- megaparsec
+- polysemy
 - polysemy-RandomFu
+- polysemy-zoo
 - random-fu
+- refined
+- servant
+- servant-websockets
+- uuid
 
 default-extensions:
+- AllowAmbiguousTypes
 - ConstraintKinds
 - DataKinds
 - DeriveGeneric
@@ -51,11 +55,10 @@ default-extensions:
 - RankNTypes
 - ScopedTypeVariables
 - StandaloneDeriving
+- TupleSections
 - TypeApplications
 - TypeFamilies
 - TypeOperators
-- AllowAmbiguousTypes
-- TupleSections
 
 ghc-options:
 - -Wall
