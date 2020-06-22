@@ -5,10 +5,10 @@ module ParserSpec where
 import ConsoleUI
 import Game
 import MyPrelude
+import Player
 import Test.Tasty.HUnit
 import Text.Megaparsec
 import Text.Megaparsec.Error (errorBundlePretty)
-import ThreePlayer
 
 failsToParse :: Show a => Parser a -> String -> Assertion
 failsToParse p s = case parse (p <* eof) "<testcase>" s of
@@ -29,26 +29,29 @@ parserAssertion p s e = case parse (p <* eof) "<testcase>" s of
       "got parse error:\n"
         ++ errorBundlePretty e
 
-commandParsesTo :: String -> Command Player -> Assertion
+commandParsesTo :: String -> Command -> Assertion
 commandParsesTo = parserAssertion pCommand
+
+p0, p1, p2 :: Player
+[p0, p1, p2] = simplePlayer <$> ["P0", "P1", "P2"]
 
 unit_commandQuit = ":q" `commandParsesTo` Quit
 
 unit_commandHintNumber =
   "P0 hint P1 [0, 2, 3] are number 3"
-    `commandParsesTo` TakeTurn (Turn P0 (Hint P1 (AreNumber (toEnum 3) (setFromList [0, 2, 3]))))
+    `commandParsesTo` TakeTurn (RawTurn p0 (RawHint p1 (AreNumber (toEnum 3) (setFromList [0, 2, 3]))))
 
 unit_commandHintColor =
   "P0 hint P1 [0, 2, 3] are color R"
-    `commandParsesTo` TakeTurn (Turn P0 (Hint P1 (AreColor Red (setFromList [0, 2, 3]))))
+    `commandParsesTo` TakeTurn (RawTurn p0 (RawHint p1 (AreColor Red (setFromList [0, 2, 3]))))
 
 unit_commandPlay =
   "P1 play 3"
-    `commandParsesTo` TakeTurn (Turn P1 (Play 3))
+    `commandParsesTo` TakeTurn (RawTurn p1 (RawPlay 3))
 
 unit_commandDiscard =
-  "P2 play 4"
-    `commandParsesTo` TakeTurn (Turn P2 (Play 4))
+  "P2 discard 4"
+    `commandParsesTo` TakeTurn (RawTurn p2 (RawDiscard 4))
 
 unit_numberOutOfBounds0 = failsToParse pNumber "0"
 

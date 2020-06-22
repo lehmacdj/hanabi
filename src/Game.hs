@@ -8,9 +8,11 @@ module Game
   )
 where
 
+import Data.Coerce (coerce)
 import Data.Generics.Labels ()
 import Data.Random
 import MyPrelude
+import Player
 import Polysemy.ConstraintAbsorber.MonadState
 import Polysemy.Error
 import Polysemy.Input
@@ -207,22 +209,22 @@ type CardIx = Int
 
 -- | The number of cards each player starts with in their hand. Dependent
 -- on the number of players.
-startingCardsInHand :: forall p. (Enum p, Bounded p, HasCallStack) => Int
-startingCardsInHand
+startingCardsInHand :: HasCallStack => [Player] -> Int
+startingCardsInHand players
   | playerCount > 5 = error "too many players"
   | playerCount > 3 = 4
   | playerCount > 0 = 5
   | otherwise = error "too few players"
   where
-    playerCount = length [minBound :: p .. maxBound]
+    playerCount = length players
 
-mkCardIx :: forall p. (Enum p, Bounded p) => Int -> Maybe CardIx
-mkCardIx x
-  | x >= 0 && x < startingCardsInHand @p = Just x
+mkCardIx :: [Player] -> Int -> Maybe CardIx
+mkCardIx players x
+  | x >= 0 && x < startingCardsInHand players = Just x
   | otherwise = Nothing
 
-allCardIxs :: forall p. (Enum p, Bounded p) => [CardIx]
-allCardIxs = [0 .. startingCardsInHand @p - 1]
+allCardIxs :: [Player] -> [CardIx]
+allCardIxs players = [0 .. startingCardsInHand players - 1]
 
 -- | A hand is just a list of cards with a couple of invariants, in terms of
 -- gameplay.
@@ -255,46 +257,74 @@ cardFor = ix
 -- generally p needs to be Enum, Bounded, and Ord
 -- this ensures that we can enumerate all the players and that they can
 -- be used as a key in a map
-newtype PlayerMap p h = PlayerMap {underlyingMap :: Map p h}
+newtype PlayerMap h = PlayerMap {underlyingMap :: Map Player' h}
   deriving (Generic, Show)
 
+-- | This function assumes that the players are valid
 makePlayerMap ::
-  (HasCallStack, Ord p, Enum p, Bounded p) =>
-  [(p, h)] ->
-  PlayerMap p h
-makePlayerMap = PlayerMap . mapFromList . checkInvariant
+  HasCallStack =>
+  -- | the caller promises that this is the complete list of players that will
+  -- be used for the game
+  [Player] ->
+  [h] ->
+  PlayerMap h
+makePlayerMap players hands =
+  checkInvariant (PlayerMap (mapFromList (coerce players `zip` hands)))
   where
-    checkInvariant xs
-      | map fst xs `isPermutationOf` [minBound .. maxBound] = xs
+    checkInvariant
+      | length players == length hands = id
       | otherwise = error "every player must be accounted for in PlayerMap"
 
 handFor ::
   ( HasCallStack,
-    Eq h,
-    Ord p,
-    Enum p,
-    Bounded p
+    Eq h
   ) =>
-  p ->
-  Lens (PlayerMap p h) (PlayerMap p h) h h
+  Player' ->
+  Lens (PlayerMap h) (PlayerMap h) h h
 handFor p = lens getter (flip setter')
   where
     err = error "invariant violated: handFor lens getter"
     getter = view (#underlyingMap . at p . non err)
     setter' h = #underlyingMap . at p ?~ h
 
-type Hands p = PlayerMap p Hand
-
 -- | a god's eye view of the state of the game, used for the core game loop,
 -- judging the actions of the players
-data GameState p = GameState
+data GameState = GameState
   { board :: Board,
     deck :: Deck,
-    hands :: Hands p
+    hands :: PlayerMap Hand,
+    -- | The players in the current game, this defines what constitutes a
+    -- Player'
+    players :: [Player]
   }
   deriving (Show, Generic)
 
-type HasGameState p = State (GameState p)
+firstPlayer :: HasCallStack => GameState -> Player'
+firstPlayer = headEx . view players'
+
+nextPlayer :: HasCallStack => GameState -> Player' -> Player'
+nextPlayer state p = headEx . takeWhile (/= p) $ cycle (state ^. players')
+  where
+    cycle xs
+      | null xs = error "nextPlayer: empty list of players!"
+      | otherwise = xs ++ cycle xs
+
+-- | By definition any player in the game state is a Player' so this is indeed
+-- safe.
+players' :: Lens' GameState [Player']
+players' = #players . coerced
+
+-- | Player but validated against a game state.
+-- @enhancement: we could enforce at the type level that this is true, but that
+-- is probably somewhat difficult because it would require threading phantom
+-- type variables absolutely everywhere which is probably not worth it
+newtype Player' = UnsafeMkPlayer' {rawPlayer :: Player}
+  deriving (Show, Eq, Ord, Generic)
+
+validatePlayer :: GameState -> Player -> Maybe Player'
+validatePlayer state player
+  | anyOf (#players . traverse) (== player) state = Just (UnsafeMkPlayer' player)
+  | otherwise = Nothing
 
 data Hint
   = AreColor Color (Set CardIx)
@@ -305,16 +335,23 @@ makePrisms ''Hint
 
 -- TODO: implement a meaningful difference between RawAction and Action
 -- specifically we would like to be "parsing not validating" in validateAction
-type RawAction p = Action p
+data RawAction
+  = RawPlay CardIx
+  | RawDiscard CardIx
+  | RawHint Player Hint
+  deriving (Show, Eq, Generic)
 
-data Action p
+data Action
   = Play CardIx
   | Discard CardIx
   | -- | the player specifies the player being given the hint
-    Hint p Hint
+    Hint Player' Hint
   deriving (Show, Eq, Generic)
 
-data Turn p = Turn p (Action p)
+data RawTurn = RawTurn Player RawAction
+  deriving (Show, Eq, Generic)
+
+data Turn = Turn Player' Action
   deriving (Show, Eq, Generic)
 
 -- | the possibilities  of what a card can be in a players hand
@@ -356,12 +393,12 @@ cardIsNotNumber n = CardPossibilities setAny (setExcept n)
 -- | indices in HandPossibilities have the same invariants as Hand has
 type HandPossibilities = [CardPossibilities]
 
-data Information p
-  = RemovedFromHand p CardIx
-  | CardSatisfies p CardIx CardPossibilities
+data Information
+  = RemovedFromHand Player' CardIx
+  | CardSatisfies Player' CardIx CardPossibilities
   deriving (Show, Generic)
 
-aboutPlayer :: Lens (Information p) (Information q) p q
+aboutPlayer :: Lens' Information Player'
 aboutPlayer = lens get set
   where
     get = \case
@@ -371,26 +408,27 @@ aboutPlayer = lens get set
       RemovedFromHand _ cix -> RemovedFromHand q cix
       CardSatisfies _ cix cps -> CardSatisfies q cix cps
 
+-- | information that is gained by a hint given to a specific player
 informationFromHint ::
-  forall p.
-  (Enum p, Bounded p) =>
-  p ->
+  -- | the player the hint was given to
+  GameState ->
+  Player' ->
   Hint ->
-  [Information p]
-informationFromHint p = \case
+  [Information]
+informationFromHint state p = \case
   AreColor c cixs ->
     [ CardSatisfies p cix $ cardIsColor c
       | cix <- setToList cixs
     ]
       ++ [ CardSatisfies p cix $ cardIsNotColor c
-           | cix <- filter (not . (`elem` cixs)) $ allCardIxs @p
+           | cix <- filter (not . (`elem` cixs)) (allCardIxs (state ^. #players))
          ]
   AreNumber n cixs ->
     [ CardSatisfies p cix $ cardIsNumber n
       | cix <- setToList cixs
     ]
       ++ [ CardSatisfies p cix $ cardIsNotNumber n
-           | cix <- filter (not . (`elem` cixs)) $ allCardIxs @p
+           | cix <- filter (not . (`elem` cixs)) (allCardIxs (state ^. #players))
          ]
 
 data CardDoesNotExist = CardDoesNotExist
@@ -400,37 +438,23 @@ data GameOver = GameOver
   deriving (Show)
 
 -- | Player input/output, the way the game interacts with the players
-data PlayerIO p m a where
+data PlayerIO m a where
   Prompt ::
     -- | the player to prompt
-    p ->
-    PlayerIO p m (RawAction p)
-  Inform :: p -> Information p -> PlayerIO p m ()
+    Player' ->
+    PlayerIO m RawAction
+  Inform :: Player' -> Information -> PlayerIO m ()
 
 makeSem ''PlayerIO
 
-informExcept ::
-  forall p r.
-  ( Member (PlayerIO p) r,
-    Enum p,
-    Bounded p,
-    Eq p
-  ) =>
-  p ->
-  Information p ->
-  Sem r ()
-informExcept p info =
-  for_ (filter (/= p) [minBound :: p .. maxBound]) $ \p -> inform p info
+-- | giveInfo === flip inform
+-- For use with for_ to broadcast info to multiple players simultaneously
+giveInfo :: Member PlayerIO r => Information -> Player' -> Sem r ()
+giveInfo = flip inform
 
-broadcast ::
-  forall p r.
-  ( Member (PlayerIO p) r,
-    Enum p,
-    Bounded p
-  ) =>
-  Information p ->
-  Sem r ()
-broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
+-- | only semi-lawful, see @filtered@ in Control.Lens for cases where it isn't
+playersExcept :: Player' -> Traversal' GameState Player'
+playersExcept p = players' . traverse . filtered (/= p)
 
 -- | takes an input stream of turns, projects out the turns so that
 -- turns are only received in the order that the game desires
@@ -438,99 +462,86 @@ broadcast info = for_ [minBound :: p .. maxBound] $ \p -> inform p info
 -- like a channel that receives turns, this makes sure to ignore actions
 -- that are taken out of turn.
 runPlayerIOToInputOutput ::
-  forall p a r.
-  ( Members [Input (Turn p), Output (p, Information p)] r,
-    Eq p
-  ) =>
-  Sem (PlayerIO p : r) a ->
+  forall r a.
+  (Members [Input RawTurn, Output (Player', Information)] r) =>
+  Sem (PlayerIO : r) a ->
   Sem r a
 runPlayerIOToInputOutput = interpret $ \case
-  Prompt p -> untilJust $ do
-    Turn p' action <- input @(Turn p)
-    pure $ guard (p == p') *> Just action
-  Inform p info -> output @(p, Information p) (p, info)
+  Prompt p' -> untilJust $ do
+    RawTurn p action <- input @RawTurn
+    pure $ guard (p == rawPlayer p') *> Just action
+  Inform p info -> output @(Player', Information) (p, info)
 
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
 -- TODO: distribute information about what cards are drawn from the deck
 takeCard ::
-  forall p r.
-  ( Members [PlayerIO p, HasGameState p] r,
-    Throws '[CardDoesNotExist] r,
-    Ord p,
-    Enum p,
-    Bounded p
+  ( Members [PlayerIO, State GameState] r,
+    Throws '[CardDoesNotExist] r
   ) =>
-  p ->
+  Player' ->
   CardIx ->
   Sem r Card
-takeCard p cix = absorbState @(GameState p) $ do
+takeCard p cix = absorbState @GameState $ do
   -- we need to reference the original state after we modify it so save a copy
-  s <- get @(GameState p)
+  s <- get @GameState
   -- this needs to be here and not computed at the end because otherwise we
   -- throw the exception after modifying state
   card <- justOrThrow CardDoesNotExist $ s ^? #hands . handFor p . cardFor cix
   _ <- #deck %= drop 1
   #hands . handFor p %= deleteAt cix
-  broadcast @p $ RemovedFromHand p cix
+  for_ (s ^. players') $ giveInfo $ RemovedFromHand p cix
   whenJust (s ^? #deck . ix 0) $ \nextCard -> do
-    informExcept p $ CardSatisfies p 0 $ cardIs nextCard
+    for_ (s ^.. playersExcept p) $ giveInfo $ CardSatisfies p 0 $ cardIs nextCard
     #hands . handFor p %= (nextCard :)
   pure card
 
 play ::
-  forall p r.
-  ( Members [PlayerIO p, HasGameState p] r,
-    Throws [CardDoesNotExist, GameOver] r,
-    Ord p,
-    Enum p,
-    Bounded p
+  forall r.
+  ( Members [PlayerIO, State GameState] r,
+    Throws [CardDoesNotExist, GameOver] r
   ) =>
-  p ->
+  Player' ->
   CardIx ->
   Sem r ()
 play p cix = do
   c <- takeCard p cix
-  s <- get @(GameState p)
+  s <- get @GameState
   s <- justOrThrow GameOver $ mapMOf #board (playB c) s
-  put @(GameState p) s
+  put @GameState s
 
 discard ::
-  forall p r.
-  ( Members [PlayerIO p, HasGameState p] r,
-    Throws [CardDoesNotExist, GameOver] r,
-    Ord p,
-    Enum p,
-    Bounded p
+  forall r.
+  ( Members [PlayerIO, State GameState] r,
+    Throws [CardDoesNotExist, GameOver] r
   ) =>
-  p ->
+  Player' ->
   CardIx ->
   Sem r ()
-discard p cix = absorbState @(GameState p) $ do
+discard p cix = absorbState @GameState $ do
   c <- takeCard p cix
   #board %= discardB c
 
 hint ::
-  forall p r.
-  ( Members [PlayerIO p, HasGameState p] r,
-    Throws '[GameOver] r,
-    Enum p,
-    Bounded p
+  ( Members [PlayerIO, State GameState] r,
+    Throws '[GameOver] r
   ) =>
-  p ->
+  Player' ->
   Hint ->
   Sem r ()
-hint p h = for_ (informationFromHint p h) broadcast
+hint p h =
+  get @GameState >>= \s ->
+    for_
+      (informationFromHint s p h)
+      (for_ (s ^. players') . giveInfo)
 
 dealHands ::
-  forall p.
-  (Ord p, Enum p, Bounded p) =>
+  [Player] ->
   Deck ->
-  (Deck, Hands p)
-dealHands startingDeck = (remainingDeck, makePlayerMap (players `zip` hs))
+  (Deck, PlayerMap Hand)
+dealHands players startingDeck = (remainingDeck, makePlayerMap players hs)
   where
-    players = [minBound :: p .. maxBound]
-    startingCards = startingCardsInHand @p
+    startingCards = startingCardsInHand players
     (remainingDeck, hs) = run . runState startingDeck $ playerHands
     playerHands = replicateM (length players) dealHand
     dealHand :: Member (State Deck) r => Sem r Hand
@@ -556,98 +567,81 @@ hintIsValidFor hint hand =
 data ActionValidationError
   = InvalidHint
   | CardIxOutOfBounds
+  | PlayerDoesNotExist
 
 validateAction ::
-  forall p r.
-  ( Member (HasGameState p) r,
-    Enum p,
-    Bounded p,
-    Ord p
-  ) =>
-  RawAction p ->
-  Sem r (Either ActionValidationError (Action p))
+  (Member (State GameState) r) =>
+  RawAction ->
+  Sem r (Either ActionValidationError Action)
 validateAction a = do
-  hs <- view #hands <$> get @(GameState p)
+  s <- get @GameState
+  let ps = view #players s
+      hs = view #hands s
   pure $ case a of
-    a'@(Hint p hint)
-      | hint `hintIsValidFor` view (handFor p) hs -> Right a'
-      | otherwise -> Left InvalidHint
-    (Play cix) -> Play <$> maybeToRight CardIxOutOfBounds (mkCardIx @p cix)
-    (Discard cix) -> Discard <$> maybeToRight CardIxOutOfBounds (mkCardIx @p cix)
+    RawHint p hint -> do
+      p' <- maybeToRight PlayerDoesNotExist (validatePlayer s p)
+      if hint `hintIsValidFor` view (handFor p') hs
+        then Right $ Hint p' hint
+        else Left InvalidHint
+    RawPlay cix -> Play <$> maybeToRight CardIxOutOfBounds (mkCardIx ps cix)
+    RawDiscard cix -> Discard <$> maybeToRight CardIxOutOfBounds (mkCardIx ps cix)
 
 gameLoop ::
-  forall p r.
-  ( Members [PlayerIO p, HasGameState p, Output (Turn p)] r,
-    Throws [CardDoesNotExist, GameOver] r,
-    Ord p,
-    Enum p,
-    Bounded p
+  ( Members [PlayerIO, State GameState, Output Turn] r,
+    Throws [CardDoesNotExist, GameOver] r
   ) =>
   -- | the player whose turn it is
-  p ->
+  Player' ->
   Sem r Void
 gameLoop currentPlayer = do
   a <- untilJust (prompt currentPlayer >>= fmap rightToMaybe . validateAction)
-  output @(Turn p) (Turn currentPlayer a)
+  output @Turn (Turn currentPlayer a)
   case a of
     Play cix -> play currentPlayer cix
     Discard cix -> discard currentPlayer cix
     Hint p h -> hint p h
-  gameLoop (next currentPlayer)
+  s <- get @GameState
+  gameLoop (nextPlayer s currentPlayer)
 
 -- | takes care of giving info about initial cards to players
 fullGameLoop ::
-  forall p r.
-  ( Members [PlayerIO p, HasGameState p, Output (Turn p)] r,
-    Throws [CardDoesNotExist, GameOver] r,
-    Ord p,
-    Enum p,
-    Bounded p
+  ( Members [PlayerIO, State GameState, Output Turn] r,
+    Throws [CardDoesNotExist, GameOver] r
   ) =>
   Sem r Void
 fullGameLoop = do
-  state <- get @(GameState p)
-  for_ (state ^@.. #hands . #underlyingMap . (itraversed <.> itraversed)) $
-    \((p, cix), c) -> informExcept p $ CardSatisfies p cix $ cardIs c
-  gameLoop @p minBound
+  s <- get @GameState
+  for_ (s ^@.. #hands . #underlyingMap . (itraversed <.> itraversed)) $
+    \((p, cix), c) ->
+      for_ (s ^.. playersExcept p) $ giveInfo $ CardSatisfies p cix $ cardIs c
+  gameLoop (firstPlayer s)
 
 -- | A deck is only valid if it is a permutation of all of the cards
 startingDeckValid :: Deck -> Bool
 startingDeckValid = (`isPermutationOf` allCards)
 
 startingStateFromDeck ::
-  forall p.
-  ( Ord p,
-    Enum p,
-    Bounded p
-  ) =>
+  [Player] ->
   Deck ->
-  GameState p
-startingStateFromDeck deck =
-  GameState startingBoard startingDeck startingHands
+  GameState
+startingStateFromDeck players deck =
+  GameState startingBoard startingDeck startingHands players
   where
-    (startingDeck, startingHands) = dealHands @p deck
+    (startingDeck, startingHands) = dealHands players deck
 
 startingDeck :: RVar Deck
 startingDeck = shuffle allCards
 
 startingState ::
-  forall p.
-  (Ord p, Enum p, Bounded p) =>
-  RVar (GameState p)
-startingState = startingStateFromDeck <$> startingDeck
+  [Player] ->
+  RVar GameState
+startingState players = startingStateFromDeck players <$> startingDeck
 
 runGame ::
-  forall p r.
-  ( HasCallStack,
-    Ord p,
-    Enum p,
-    Bounded p
-  ) =>
-  GameState p ->
-  Sem (Error GameOver : HasGameState p : r) Void ->
-  -- | result is the fireworks produced by the game
-  Sem r (GameState p)
+  GameState ->
+  Sem (Error GameOver : State GameState : r) Void ->
+  -- | result is the final game state
+  Sem r GameState
 runGame s = fmap fst . runState s . runError'
   where
     runError' :: forall e r. Sem (Error e : r) Void -> Sem r e

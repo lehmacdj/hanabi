@@ -7,14 +7,14 @@ module SimpleBot where
 import Game
 import MyPrelude
 
-data BotInformation p = BotInformation
-  { player :: p,
+data BotInformation = BotInformation
+  { player :: Player',
     handPossibilities :: HandPossibilities
   }
   deriving (Show, Generic)
 
 updateHandPossibilities ::
-  Ord p => p -> Information p -> HandPossibilities -> HandPossibilities
+  Player' -> Information -> HandPossibilities -> HandPossibilities
 updateHandPossibilities p i hp
   | hasn't (aboutPlayer . only p) i = hp
   | otherwise = case i of
@@ -22,9 +22,8 @@ updateHandPossibilities p i hp
     CardSatisfies _ cix ci -> over (ix cix) (<> ci) hp
 
 updateBotInfo ::
-  Ord p =>
-  Information p ->
-  BotInformation p ->
-  BotInformation p
+  Information ->
+  BotInformation ->
+  BotInformation
 updateBotInfo i bi =
   over #handPossibilities (updateHandPossibilities (view #player bi) i) bi

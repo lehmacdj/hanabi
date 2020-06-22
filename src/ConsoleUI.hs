@@ -2,7 +2,8 @@ module ConsoleUI where
 
 import ConsoleIO
 import Game
-import MyPrelude hiding (bracket, try)
+import MyPrelude hiding (bracket, some, try)
+import Player
 import Polysemy.Error
 import Polysemy.Input
 import Polysemy.Output
@@ -35,30 +36,29 @@ bracket :: Parser a -> Parser a
 bracket = between (symbol "[") (symbol "]")
 
 outputTurnToConsoleIO ::
-  forall p r a.
-  (Show p, Members [ConsoleIO, Output (Turn p)] r) =>
+  Members [ConsoleIO, Output Turn] r =>
   Sem r a ->
   Sem r a
-outputTurnToConsoleIO = intercept @(Output (Turn p)) $ \case
+outputTurnToConsoleIO = intercept @(Output Turn) $ \case
   Output (Turn p action) -> writeln ("<everyone> " ++ show p ++ " did " ++ show action)
 
 outputPrivateInfoToConsoleIO ::
-  forall p r a.
-  (Show p, Members [ConsoleIO, Output (p, Information p)] r) =>
+  Members [ConsoleIO, Output (Player', Information)] r =>
   Sem r a ->
   Sem r a
-outputPrivateInfoToConsoleIO = intercept @(Output (p, Information p)) $ \case
+outputPrivateInfoToConsoleIO = intercept @(Output (Player', Information)) $ \case
   Output (p, info) -> writeln ("<" ++ show p ++ "> " ++ show info)
 
-data Command p
+data Command
   = Quit
-  | TakeTurn (Turn p)
+  | TakeTurn RawTurn
   deriving (Show, Eq)
 
-pPlayer :: (Show p, Enum p, Bounded p) => Parser p
-pPlayer =
-  lexeme . choice $
-    fmap (\p -> symbol (show p) $> p) [minBound .. maxBound]
+playerChar :: Parser Char
+playerChar = oneOf $ ['A' .. 'Z'] ++ ['a' .. 'z'] ++ ['0' .. '9']
+
+pPlayer :: Parser Player
+pPlayer = lexeme (simplePlayer <$> some playerChar)
 
 pCardIx :: Parser CardIx
 pCardIx = lexeme L.decimal
@@ -95,33 +95,29 @@ pHint =
       flip AreNumber <$> (pCardIxSet <* symbol "are number") <*> pNumber
     ]
 
-pAction :: (Show p, Enum p, Bounded p) => Parser (Action p)
+pAction :: Parser RawAction
 pAction =
   lexeme . choice $
-    [ symbol "play" *> (Play <$> pCardIx),
-      symbol "discard" *> (Discard <$> pCardIx),
-      symbol "hint" *> (Hint <$> pPlayer <*> pHint)
+    [ symbol "play" *> (RawPlay <$> pCardIx),
+      symbol "discard" *> (RawDiscard <$> pCardIx),
+      symbol "hint" *> (RawHint <$> pPlayer <*> pHint)
     ]
 
-pCommand :: (Show p, Enum p, Bounded p) => Parser (Command p)
+pCommand :: Parser Command
 pCommand =
   lexeme . choice $
     [ symbol ":q" $> Quit,
-      fmap TakeTurn $ Turn <$> pPlayer <*> pAction
+      fmap TakeTurn $ RawTurn <$> pPlayer <*> pAction
     ]
 
 getInputCommandFromConsoleIO ::
-  forall p r a.
-  ( Member ConsoleIO r,
-    Show p,
-    Enum p,
-    Bounded p
-  ) =>
-  Sem (Input (Command p) : r) a ->
+  forall r a.
+  Member ConsoleIO r =>
+  Sem (Input Command : r) a ->
   Sem r a
 getInputCommandFromConsoleIO = runInputSem go
   where
-    go :: Sem r (Command p)
+    go :: Sem r Command
     go = do
       inputLine <- untilJust getInputLine
       case parse (pCommand <* eof) "<interactive>" inputLine of
@@ -131,41 +127,30 @@ getInputCommandFromConsoleIO = runInputSem go
 -- | interpreting a command returns the turn that the command produces if it
 -- is one and otherwise executes the command in the effect context
 interpretCommand ::
-  forall p r.
-  ( Throws '[GameOver] r,
-    Show p,
-    Enum p,
-    Bounded p
-  ) =>
-  Command p ->
-  Sem r (Turn p)
+  Throws '[GameOver] r =>
+  Command ->
+  Sem r RawTurn
 interpretCommand = \case
   Quit -> throw GameOver
   TakeTurn t -> pure t
 
 runPlayerIOAsConsoleUI ::
-  forall p r a.
-  ( Show p,
-    Eq p,
-    Enum p,
-    Bounded p,
-    Members [ConsoleIO, Error GameOver] r
-  ) =>
-  Sem (PlayerIO p : r) a ->
+  Members [ConsoleIO, Error GameOver] r =>
+  Sem (PlayerIO : r) a ->
   Sem r a
 runPlayerIOAsConsoleUI =
   subsume
     . subsume
-    . ignoreOutput @(p, Information p)
-    . outputPrivateInfoToConsoleIO @p
+    . ignoreOutput @(Player', Information)
+    . outputPrivateInfoToConsoleIO
     . getInputCommandFromConsoleIO
     . contramapInput interpretCommand
     -- effect for interpret command to interpret in terms of
-    . raiseUnder @(Input (Command p))
-    . runPlayerIOToInputOutput @p
+    . raiseUnder @(Input Command)
+    . runPlayerIOToInputOutput
     -- effects for runPlayerIOToInputOutput to interpret in terms of
-    . raiseUnder @(Input (Turn p))
-    . raiseUnder @(Output (p, Information p))
+    . raiseUnder @(Input RawTurn)
+    . raiseUnder @(Output (Player', Information))
     -- final effects we want to interpret in terms of
     . raiseUnder @(Error GameOver)
     . raiseUnder @ConsoleIO

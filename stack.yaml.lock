@@ -5,19 +5,12 @@
 
 packages:
 - completed:
-    hackage: refined-0.4.4@sha256:c387bd725ecb18f8ec93b2271b53604f2ed70f7e2fc548dc5f2f1991d4cd9ee0,2776
+    hackage: intero-0.1.40@sha256:341c4559929723045a418f5da3ce448557916b156a32b6fb35f6ade3800321d9,1879
     pantry-tree:
-      size: 788
-      sha256: 8e5a9d4797cee5cd94f5791529d1628cf0714c43c442022cbc89cfb76e340111
+      size: 1131
+      sha256: 4ee3552ce0f90c8f909dcc7f947caad90fbdfc01b990b8b6ef62154f465d3d84
   original:
-    hackage: refined-0.4.4@sha256:c387bd725ecb18f8ec93b2271b53604f2ed70f7e2fc548dc5f2f1991d4cd9ee0,2776
-- completed:
-    hackage: prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
-    pantry-tree:
-      size: 2105
-      sha256: 033fd060e1eea501feffcc385a1704613abed265b593c07d058d0e5e4f88096c
-  original:
-    hackage: prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
+    hackage: intero-0.1.40
 - completed:
     hackage: polysemy-1.2.3.0@sha256:2345b6b76adc8f91fc88251129deff584cebcd07e952dd66aa512c69949df537,6097
     pantry-tree:
@@ -26,13 +19,6 @@ packages:
   original:
     hackage: polysemy-1.2.3.0@sha256:2345b6b76adc8f91fc88251129deff584cebcd07e952dd66aa512c69949df537,6097
 - completed:
-    hackage: polysemy-zoo-0.6.0.1@sha256:2989dc2cf723e82d19e2cea2aa38055be89c6a53bad6a2ca11e63908f4645318,4032
-    pantry-tree:
-      size: 3012
-      sha256: 72c8c5ecb7b5c42ccfc0b26c0015ac25c757376ab0e77306dbf9c8aca232b6dd
-  original:
-    hackage: polysemy-zoo-0.6.0.1
-- completed:
     hackage: polysemy-RandomFu-0.4.0.0@sha256:b86078539a003fe21e8c37b35c28bb6d6c8a69212d0c12eddb98a03002dd7c8a,2560
     pantry-tree:
       size: 480
@@ -40,12 +26,33 @@ packages:
   original:
     hackage: polysemy-RandomFu-0.4.0.0
 - completed:
-    hackage: intero-0.1.40@sha256:341c4559929723045a418f5da3ce448557916b156a32b6fb35f6ade3800321d9,1879
+    hackage: polysemy-zoo-0.6.0.1@sha256:2989dc2cf723e82d19e2cea2aa38055be89c6a53bad6a2ca11e63908f4645318,4032
     pantry-tree:
-      size: 1131
-      sha256: 4ee3552ce0f90c8f909dcc7f947caad90fbdfc01b990b8b6ef62154f465d3d84
+      size: 3012
+      sha256: 72c8c5ecb7b5c42ccfc0b26c0015ac25c757376ab0e77306dbf9c8aca232b6dd
   original:
-    hackage: intero-0.1.40
+    hackage: polysemy-zoo-0.6.0.1
+- completed:
+    hackage: prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
+    pantry-tree:
+      size: 2105
+      sha256: 033fd060e1eea501feffcc385a1704613abed265b593c07d058d0e5e4f88096c
+  original:
+    hackage: prettyprinter-1.3.0@sha256:83336d853f38e72f9213a3051de11dcb3c948eb09903a34f312e4fef00d79f10,5537
+- completed:
+    hackage: refined-0.4.4@sha256:c387bd725ecb18f8ec93b2271b53604f2ed70f7e2fc548dc5f2f1991d4cd9ee0,2776
+    pantry-tree:
+      size: 788
+      sha256: 8e5a9d4797cee5cd94f5791529d1628cf0714c43c442022cbc89cfb76e340111
+  original:
+    hackage: refined-0.4.4@sha256:c387bd725ecb18f8ec93b2271b53604f2ed70f7e2fc548dc5f2f1991d4cd9ee0,2776
+- completed:
+    hackage: servant-websockets-2.0.0@sha256:6e9e3600bced90fd52ed3d1bf632205cb21479075b20d6637153cc4567000234,2253
+    pantry-tree:
+      size: 523
+      sha256: 085c6620bff7671bef1d969652a349271c3703fbf10dd753cb63ee1cd700bca5
+  original:
+    hackage: servant-websockets-2.0.0@sha256:6e9e3600bced90fd52ed3d1bf632205cb21479075b20d6637153cc4567000234,2253
 snapshots:
 - completed:
     size: 524996
