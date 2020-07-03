@@ -472,7 +472,6 @@ runPlayerIOToInputOutput = interpret $ \case
 
 -- | take a card out of a players hand, replacing that card with a new card
 -- from the deck. returns Nothing if there are no cards left in the deck
--- TODO: distribute information about what cards are drawn from the deck
 takeCard ::
   ( Members [PlayerIO, State GameState] r,
     Throws '[CardDoesNotExist] r
