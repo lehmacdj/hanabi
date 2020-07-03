@@ -333,8 +333,6 @@ data Hint
 
 makePrisms ''Hint
 
--- TODO: implement a meaningful difference between RawAction and Action
--- specifically we would like to be "parsing not validating" in validateAction
 data RawAction
   = RawPlay CardIx
   | RawDiscard CardIx
