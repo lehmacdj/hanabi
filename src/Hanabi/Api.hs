@@ -30,6 +30,11 @@ data HanabiGameApi route = HanabiGameApi
              \Responds with 400 bad request if the game can't be joined."
         :> "join"
         :> PostNoContent '[JSON] NoContent,
+    -- state ::
+    --   route
+    --     :- Summary "Get the current state, as your player can see."
+    --     :> "state"
+    --     :> Get '[JSON] GameState,
     connect ::
       route
         :- Summary
