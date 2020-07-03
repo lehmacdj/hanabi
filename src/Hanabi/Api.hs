@@ -9,10 +9,10 @@ import Servant.API.Generic
 import Servant.API.WebSocketConduit
 
 data HanabiApi route = HanabiApi
-  { makeGuest ::
+  { createGuest ::
       route
         :- Summary "creates a guest account for a session of hanabi"
-        :> "user"
+        :> "guest"
         :> ReqBody '[JSON] String
         :> Put '[JSON] Player,
     gameApi ::
@@ -23,9 +23,17 @@ data HanabiApi route = HanabiApi
   }
 
 data HanabiGameApi route = HanabiGameApi
-  { connect ::
+  { join ::
       route
-        :- Summary "creates a websocket that receives state updates"
+        :- Summary
+             "Attempts to join the game. \
+             \Responds with 400 bad request if the game can't be joined."
+        :> "join"
+        :> PostNoContent '[JSON] NoContent,
+    connect ::
+      route
+        :- Summary
+             "creates a websocket that receives state updates"
         :> "state"
         :> "subscribe"
         :> WebSocketSource Information,
