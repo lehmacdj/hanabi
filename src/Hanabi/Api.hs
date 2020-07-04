@@ -18,6 +18,7 @@ data HanabiApi route = HanabiApi
     gameApi ::
       route
         :- BasicAuth "Hanabi Game" Player
+        :> "game"
         :> Capture "game-id" HGID
         :> ToServant HanabiGameApi route
   }
