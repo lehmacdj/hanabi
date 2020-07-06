@@ -55,7 +55,8 @@ data HanabiGameApi route = HanabiGameApi
   }
   deriving (Generic)
 
-hanabiApi :: HanabiApi AsServer -- (AsServerT (Sem r))
+-- TODO: use AsServerT (Sem r) for some r
+hanabiApi :: HanabiApi AsServer
 hanabiApi =
   HanabiApi
     { createGuest = _,
