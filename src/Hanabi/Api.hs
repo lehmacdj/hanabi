@@ -4,9 +4,12 @@ import Game
 import HGID
 import MyPrelude
 import Player
+import Polysemy.Input
 import Servant.API
 import Servant.API.Generic
 import Servant.API.WebSocketConduit
+import Servant.Server
+import Servant.Server.Generic
 
 data HanabiApi route = HanabiApi
   { createGuest ::
@@ -20,7 +23,7 @@ data HanabiApi route = HanabiApi
         :- BasicAuth "Hanabi Game" Player
         :> "game"
         :> Capture "game-id" HGID
-        :> ToServant HanabiGameApi route
+        :> ToServant HanabiGameApi AsApi
   }
 
 data HanabiGameApi route = HanabiGameApi
@@ -51,3 +54,13 @@ data HanabiGameApi route = HanabiGameApi
         :> PostNoContent '[JSON] NoContent
   }
   deriving (Generic)
+
+hanabiApi :: HanabiApi AsServer -- (AsServerT (Sem r))
+hanabiApi =
+  HanabiApi
+    { createGuest = _,
+      gameApi = \p gid -> toServant (hanabiGameApi p gid)
+    }
+
+hanabiGameApi :: Player -> HGID -> HanabiGameApi AsServer
+hanabiGameApi player gameId = undefined
