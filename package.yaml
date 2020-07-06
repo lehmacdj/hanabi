@@ -22,6 +22,7 @@ description:         Please see the README on GitHub at <https://github.com/lehm
 dependencies:
 - base >= 4.7 && < 5
 - classy-prelude
+- conduit
 - containers
 - exceptions
 - first-class-families
@@ -35,6 +36,7 @@ dependencies:
 - random-fu
 - refined
 - servant
+- servant-server
 - servant-websockets
 - uuid
 
