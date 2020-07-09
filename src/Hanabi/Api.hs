@@ -1,14 +1,15 @@
 module Hanabi.Api where
 
+import Data.UUID
 import Game
 import HGID
 import MyPrelude
 import Player
-import Polysemy.Input
+import Polysemy.KVStore
+import Polysemy.RandomFu
 import Servant.API
 import Servant.API.Generic
 import Servant.API.WebSocketConduit
-import Servant.Server
 import Servant.Server.Generic
 
 data HanabiApi route = HanabiApi
@@ -25,6 +26,7 @@ data HanabiApi route = HanabiApi
         :> Capture "game-id" HGID
         :> ToServant HanabiGameApi AsApi
   }
+  deriving (Generic)
 
 data HanabiGameApi route = HanabiGameApi
   { join ::
@@ -65,14 +67,20 @@ createGuestUser name = do
   pure player
 
 -- TODO: use AsServerT (Sem r) for some r
-hanabiApi :: HanabiApi AsServer
+hanabiApi ::
+  Members [RandomFu, KVStore UUID Player] r =>
+  HanabiApi (AsServerT (Sem r))
 hanabiApi =
   HanabiApi
-    { createGuest = undefined,
+    { createGuest = createGuestUser,
       gameApi = \p gid -> toServant (hanabiGameApi p gid)
     }
 
-hanabiGameApi :: Player -> HGID -> HanabiGameApi AsServer
+hanabiGameApi ::
+  Members [RandomFu, KVStore UUID Player] r =>
+  Player ->
+  HGID ->
+  HanabiGameApi (AsServerT (Sem r))
 hanabiGameApi player gameId =
   HanabiGameApi
     { join = undefined,
