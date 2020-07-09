@@ -71,7 +71,7 @@ createGuestUser name = do
   pure player
 
 hanabiApi ::
-  Members [RandomFu, KVStore UUID Player] r =>
+  Members [RandomFu, KVStore UUID Player, KVStore HGID GameState] r =>
   HanabiApi (AsServerT (Sem r))
 hanabiApi =
   HanabiApi
@@ -80,7 +80,7 @@ hanabiApi =
     }
 
 hanabiGameApi ::
-  Members [RandomFu, KVStore UUID Player] r =>
+  Members [RandomFu, KVStore UUID Player, KVStore HGID GameState] r =>
   Player ->
   HGID ->
   HanabiGameApi (AsServerT (Sem r))
