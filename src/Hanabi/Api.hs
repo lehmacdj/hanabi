@@ -57,6 +57,10 @@ data HanabiGameApi route = HanabiGameApi
   }
   deriving (Generic)
 
+-- | TODO: think about how I want to handle users, do I want players to be
+-- intrinsically tied to games or not. Probably best to continue operating with
+-- the current design at least until I finish implementing this API because I
+-- will have a better idea of what my goals should be then I think
 createGuestUser ::
   Members [RandomFu, KVStore UUID Player] r =>
   String ->
@@ -66,7 +70,6 @@ createGuestUser name = do
   writeKV (identifier player) player
   pure player
 
--- TODO: use AsServerT (Sem r) for some r
 hanabiApi ::
   Members [RandomFu, KVStore UUID Player] r =>
   HanabiApi (AsServerT (Sem r))
