@@ -55,6 +55,15 @@ data HanabiGameApi route = HanabiGameApi
   }
   deriving (Generic)
 
+createGuestUser ::
+  Members [RandomFu, KVStore UUID Player] r =>
+  String ->
+  Sem r Player
+createGuestUser name = do
+  player <- sampleRVar (randomGuestPlayer name)
+  writeKV (identifier player) player
+  pure player
+
 -- TODO: use AsServerT (Sem r) for some r
 hanabiApi :: HanabiApi AsServer
 hanabiApi =
