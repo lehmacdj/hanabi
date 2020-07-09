@@ -1,5 +1,6 @@
 module Player where
 
+import Data.Random
 import Data.UUID
 import MyPrelude
 
@@ -17,3 +18,10 @@ data Player = Player
 
 simplePlayer :: String -> Player
 simplePlayer n = Player n nil
+
+randomUUID :: RVar UUID
+randomUUID =
+  fromWords <$> stdUniform <*> stdUniform <*> stdUniform <*> stdUniform
+
+randomGuestPlayer :: String -> RVar Player
+randomGuestPlayer name = Player name <$> randomUUID
