@@ -59,9 +59,14 @@ data HanabiGameApi route = HanabiGameApi
 hanabiApi :: HanabiApi AsServer
 hanabiApi =
   HanabiApi
-    { createGuest = _,
+    { createGuest = undefined,
       gameApi = \p gid -> toServant (hanabiGameApi p gid)
     }
 
 hanabiGameApi :: Player -> HGID -> HanabiGameApi AsServer
-hanabiGameApi player gameId = undefined
+hanabiGameApi player gameId =
+  HanabiGameApi
+    { join = undefined,
+      connect = undefined,
+      act = undefined
+    }
