@@ -1,4 +1,9 @@
-module Player where
+module Player
+  ( Player (..),
+    simplePlayer,
+    randomGuestPlayer,
+  )
+where
 
 import Data.Random
 import Data.UUID
