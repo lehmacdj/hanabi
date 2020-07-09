@@ -33,6 +33,7 @@ dependencies:
 - polysemy
 - polysemy-RandomFu
 - polysemy-zoo
+- random
 - random-fu
 - refined
 - servant
