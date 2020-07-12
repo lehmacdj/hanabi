@@ -22,6 +22,8 @@ module MyPrelude
     contramapInput,
     maybeToRight,
     rightToMaybe,
+    bshow,
+    blshow,
   )
 where
 
@@ -124,3 +126,11 @@ maybeToRight _ (Just x) = Right x
 rightToMaybe :: Either e a -> Maybe a
 rightToMaybe (Right x) = Just x
 rightToMaybe _ = Nothing
+
+-- | ByteString show
+bshow :: Show a => a -> ByteString
+bshow = fromString . show
+
+-- | ByteString lazy show
+blshow :: Show a => a -> LByteString
+blshow = fromString . show

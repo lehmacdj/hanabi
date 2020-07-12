@@ -21,6 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/lehm
 
 dependencies:
 - base >= 4.7 && < 5
+- bytestring
 - classy-prelude
 - conduit
 - containers
@@ -54,6 +55,7 @@ default-extensions:
 - NoImplicitPrelude
 - NoMonomorphismRestriction
 - OverloadedLabels
+- OverloadedStrings
 - PolyKinds
 - RankNTypes
 - ScopedTypeVariables
