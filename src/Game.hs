@@ -213,7 +213,7 @@ startingCardsInHand :: HasCallStack => [Player] -> Int
 startingCardsInHand players
   | playerCount > 5 = error "too many players"
   | playerCount > 3 = 4
-  | playerCount > 0 = 5
+  | playerCount > 1 = 5
   | otherwise = error "too few players"
   where
     playerCount = length players
