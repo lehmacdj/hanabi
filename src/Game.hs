@@ -583,6 +583,22 @@ validateAction a = do
     RawPlay cix -> Play <$> maybeToRight CardIxOutOfBounds (mkCardIx ps cix)
     RawDiscard cix -> Discard <$> maybeToRight CardIxOutOfBounds (mkCardIx ps cix)
 
+stepGame ::
+  ( Members [PlayerIO, State GameState, Output Turn] r,
+    Throws [CardDoesNotExist, GameOver] r
+  ) =>
+  Player' ->
+  Sem r Player'
+stepGame currentPlayer = do
+  a <- untilJust (prompt currentPlayer >>= fmap rightToMaybe . validateAction)
+  output @Turn (Turn currentPlayer a)
+  case a of
+    Play cix -> play currentPlayer cix
+    Discard cix -> discard currentPlayer cix
+    Hint p h -> hint p h
+  s <- get @GameState
+  pure $ nextPlayer s currentPlayer
+
 gameLoop ::
   ( Members [PlayerIO, State GameState, Output Turn] r,
     Throws [CardDoesNotExist, GameOver] r
@@ -591,14 +607,8 @@ gameLoop ::
   Player' ->
   Sem r Void
 gameLoop currentPlayer = do
-  a <- untilJust (prompt currentPlayer >>= fmap rightToMaybe . validateAction)
-  output @Turn (Turn currentPlayer a)
-  case a of
-    Play cix -> play currentPlayer cix
-    Discard cix -> discard currentPlayer cix
-    Hint p h -> hint p h
-  s <- get @GameState
-  gameLoop (nextPlayer s currentPlayer)
+  nextPlayer <- stepGame currentPlayer
+  gameLoop nextPlayer
 
 -- | takes care of giving info about initial cards to players
 fullGameLoop ::
