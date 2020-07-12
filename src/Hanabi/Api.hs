@@ -85,7 +85,13 @@ createGuestUser name = do
   pure player
 
 hanabiApi ::
-  Members [RandomFu, KVStore UUID Player, KVStore HGID LobbyState] r =>
+  Members
+    [ RandomFu,
+      KVStore UUID Player,
+      KVStore HGID LobbyState,
+      Error ServerError
+    ]
+    r =>
   HanabiApi (AsServerT (Sem r))
 hanabiApi =
   HanabiApi
@@ -165,13 +171,21 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
       _ -> throw (gameAlreadyStartedCannot "start")
 
 hanabiGameApi ::
-  Members [RandomFu, KVStore UUID Player, KVStore HGID LobbyState] r =>
+  Members
+    [ RandomFu,
+      KVStore UUID Player,
+      KVStore HGID LobbyState,
+      Error ServerError
+    ]
+    r =>
   Player ->
   HGID ->
   HanabiGameApi (AsServerT (Sem r))
 hanabiGameApi player gameId =
   HanabiGameApi
-    { join = undefined,
+    { join = joinGame player gameId,
+      playersGet = getPlayers gameId,
+      start = startGame gameId,
       connect = undefined,
       act = undefined
     }
