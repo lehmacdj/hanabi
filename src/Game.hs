@@ -8,6 +8,8 @@ module Game
   )
 where
 
+-- @concurrency: TODO: replace State with AtomicState
+
 import Data.Coerce (coerce)
 import Data.Generics.Labels ()
 import Data.Random

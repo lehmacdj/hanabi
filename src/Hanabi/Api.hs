@@ -102,8 +102,24 @@ hanabiApi =
 data LobbyState
   = Starting [Player]
   | -- | current game state + whose turn it is
+    -- TODO: migrate to a model where we spin up a thread running the game
+    -- and interact with that thread via active connections + a state that
+    -- is only written to by the game process but can be read externally
+    -- as well, we need to implement Input in terms of read operations on a
+    -- channel that we write to when receiving a /<gameid>/act request and
+    -- Output as write operations to websockets which we store in an array of
+    -- all of the listeners, additionally we want to log all of the actions in
+    -- the game, so when the game is complete we can have a log of what
+    -- happened over the course of the game
+    -- so:
+    -- - choose what state we need to track for in progress games
+    -- - logging actions taken
+    -- - input channel for /act endpoint
+    -- - output to websocket endpoints
+    -- - interpreter that allows other threads to also read game state
     InProgress Player GameState
-  | Completed GameState
+  | -- | TODO: add some extra details, i.e. log of game
+    Completed GameState
 
 badGame :: HGID -> ServerError
 badGame hgid = err400 {errBody = "Couldn't find game: " <> blshow hgid}
@@ -123,7 +139,7 @@ joinGame player hgid = do
   -- to prevent a race condition where two players join at the same time
   lobbyState <- lookupOrThrowKV badGame hgid
   case lobbyState of
-    -- add logic to check that number of players is valid
+    -- TODO: add logic to check that number of players is valid
     Starting players -> writeKV hgid (Starting (player : players)) $> NoContent
     _ -> throw (gameAlreadyStartedCannot "join")
 
@@ -169,6 +185,13 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
         startingState <- sampleRVar (startingState players)
         writeKV hgid (InProgress firstPlayer startingState)
       _ -> throw (gameAlreadyStartedCannot "start")
+
+-- subscribeToState ::
+--   Members [RandomFu, KVStore HGID LobbyState, Error ServerError] r =>
+--   Player ->
+--   HGID ->
+--   _
+-- subscribeToState = undefined
 
 hanabiGameApi ::
   Members
