@@ -99,6 +99,11 @@ hanabiApi =
       gameApi = \p gid -> toServant (hanabiGameApi p gid)
     }
 
+data InProgressState = InProgressState
+  { gameState :: IORef GameState,
+    actionInput :: Chan RawAction
+  }
+
 data LobbyState
   = Starting [Player]
   | -- | current game state + whose turn it is
@@ -117,7 +122,7 @@ data LobbyState
     -- - input channel for /act endpoint
     -- - output to websocket endpoints
     -- - interpreter that allows other threads to also read game state
-    InProgress Player GameState
+    InProgress (IORef GameState)
   | -- | TODO: add some extra details, i.e. log of game
     Completed GameState
 
