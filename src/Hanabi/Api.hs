@@ -1,5 +1,6 @@
 module Hanabi.Api where
 
+import Control.Concurrent (ThreadId, forkIO)
 import Data.Random
 import Data.UUID
 import Game
@@ -7,8 +8,10 @@ import HGID
 import MyPrelude
 import Player
 import Polysemy.Error
+import Polysemy.Input
 import Polysemy.KVStore
-import Polysemy.RandomFu
+import Polysemy.Output
+import Polysemy.State
 import Servant.API
 import Servant.API.Generic
 import Servant.API.WebSocketConduit
@@ -76,17 +79,17 @@ data HanabiGameApi route = HanabiGameApi
 -- the current design at least until I finish implementing this API because I
 -- will have a better idea of what my goals should be then I think
 createGuestUser ::
-  Members [RandomFu, KVStore UUID Player] r =>
+  Members [Embed IO, KVStore UUID Player] r =>
   String ->
   Sem r Player
 createGuestUser name = do
-  player <- sampleRVar (randomGuestPlayer name)
+  player <- embed @IO $ sample (randomGuestPlayer name)
   writeKV (identifier player) player
   pure player
 
 hanabiApi ::
   Members
-    [ RandomFu,
+    [ Embed IO,
       KVStore UUID Player,
       KVStore HGID LobbyState,
       Error ServerError
@@ -101,8 +104,10 @@ hanabiApi =
 
 data InProgressState = InProgressState
   { gameState :: IORef GameState,
-    actionInput :: Chan RawAction
+    actionInput :: Chan RawAction,
+    gameThread :: ThreadId
   }
+  deriving (Generic)
 
 data LobbyState
   = Starting [Player]
@@ -122,7 +127,7 @@ data LobbyState
     -- - input channel for /act endpoint
     -- - output to websocket endpoints
     -- - interpreter that allows other threads to also read game state
-    InProgress (IORef GameState)
+    InProgress InProgressState
   | -- | TODO: add some extra details, i.e. log of game
     Completed GameState
 
@@ -149,15 +154,19 @@ joinGame player hgid = do
     _ -> throw (gameAlreadyStartedCannot "join")
 
 getPlayers ::
-  Members [KVStore HGID LobbyState, Error ServerError] r =>
+  Members [KVStore HGID LobbyState, Error ServerError, Embed IO] r =>
   HGID ->
   Sem r [Player]
-getPlayers hgid = playersFromState <$> lookupOrThrowKV badGame hgid
-  where
-    playersFromState = \case
-      Starting players -> players
-      InProgress _ state -> view #players state
-      Completed state -> view #players state
+getPlayers hgid = do
+  lobbyState <- lookupOrThrowKV badGame hgid
+  case lobbyState of
+    Starting players -> pure players
+    InProgress state ->
+      embed @IO
+        . fmap (view #players)
+        . readIORef
+        $ view #gameState state
+    Completed state -> pure $ view #players state
 
 gameAlreadyStartedCannot :: LByteString -> ServerError
 gameAlreadyStartedCannot action =
@@ -172,9 +181,23 @@ badPlayerCount playerCount =
           <> ". The number of players must be between 3 and 5."
     }
 
+playGame ::
+  IORef GameState ->
+  Chan RawAction ->
+  Sem
+    [ Output Turn,
+      PlayerIO,
+      Error GameOver,
+      State GameState,
+      Error CardDoesNotExist
+    ]
+    Void ->
+  IO ()
+playGame = undefined
+
 startGame ::
   forall r.
-  Members [RandomFu, KVStore HGID LobbyState, Error ServerError] r =>
+  Members [Embed IO, KVStore HGID LobbyState, Error ServerError] r =>
   HGID ->
   Sem r NoContent
 startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
@@ -185,10 +208,14 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
         let playerCount = length players
             validPlayerCount = playerCount <= 5 && playerCount >= 2
         unless validPlayerCount $ throw (badPlayerCount playerCount)
-        players <- sampleRVar (shuffle players)
-        let firstPlayer = headEx players
-        startingState <- sampleRVar (startingState players)
-        writeKV hgid (InProgress firstPlayer startingState)
+        startingState <- embed @IO $ sample (startingState players)
+        stateIORef <- embed @IO $ newIORef startingState
+        chan <- newChan
+        threadId <- embed $ forkIO (playGame stateIORef chan fullGameLoop)
+        let inProgressState = InProgressState stateIORef chan threadId
+        writeKV hgid (InProgress inProgressState)
+      -- TODO: possibly allow starting game from completed game, i.e. with same
+      -- players
       _ -> throw (gameAlreadyStartedCannot "start")
 
 -- subscribeToState ::
@@ -200,7 +227,7 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
 
 hanabiGameApi ::
   Members
-    [ RandomFu,
+    [ Embed IO,
       KVStore UUID Player,
       KVStore HGID LobbyState,
       Error ServerError
