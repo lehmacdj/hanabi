@@ -181,7 +181,7 @@ badPlayerCount playerCount =
           <> ". The number of players must be between 3 and 5."
     }
 
-playGame ::
+runGameThread ::
   IORef GameState ->
   Chan RawAction ->
   Sem
@@ -193,7 +193,7 @@ playGame ::
     ]
     Void ->
   IO ()
-playGame = undefined
+runGameThread = undefined
 
 startGame ::
   forall r.
@@ -211,7 +211,7 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
         startingState <- embed @IO $ sample (startingState players)
         stateIORef <- embed @IO $ newIORef startingState
         chan <- newChan
-        threadId <- embed $ forkIO (playGame stateIORef chan fullGameLoop)
+        threadId <- embed $ forkIO (runGameThread stateIORef chan fullGameLoop)
         let inProgressState = InProgressState stateIORef chan threadId
         writeKV hgid (InProgress inProgressState)
       -- TODO: possibly allow starting game from completed game, i.e. with same
