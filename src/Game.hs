@@ -615,15 +615,15 @@ gameLoop currentPlayer = do
 -- | takes care of giving info about initial cards to players
 fullGameLoop ::
   ( Members [PlayerIO, State GameState, Output Turn] r,
-    Throws [CardDoesNotExist, GameOver] r
+    Throws '[CardDoesNotExist] r
   ) =>
-  Sem r Void
+  Sem r ()
 fullGameLoop = do
   s <- get @GameState
   for_ (s ^@.. #hands . #underlyingMap . (itraversed <.> itraversed)) $
     \((p, cix), c) ->
       for_ (s ^.. playersExcept p) $ giveInfo $ CardSatisfies p cix $ cardIs c
-  gameLoop (firstPlayer s)
+  runError' @GameOver (gameLoop (firstPlayer s)) $> ()
 
 -- | A deck is only valid if it is a permutation of all of the cards
 startingDeckValid :: Deck -> Bool

@@ -31,23 +31,30 @@ handleIndexError = (>>= either (const writeErrorMessage) pure) . runError
   where
     writeErrorMessage = writeln "error: unrecoverable index out of bounds error"
 
+handleQuitGame ::
+  Member ConsoleIO r => Sem (Error QuitGame : r) () -> Sem r ()
+handleQuitGame = (>>= either (const writeErrorMessage) pure) . runError
+  where
+    writeErrorMessage = writeln "goodbye! :)"
+
 playGame ::
   GameState ->
   Sem
     [ Output Turn,
       PlayerIO,
-      Error GameOver,
       State GameState,
       Error CardDoesNotExist,
       ConsoleIO
     ]
-    Void ->
+    () ->
   IO ()
 playGame startingState game =
   game
     & ignoreOutput @Turn . outputTurnToConsoleIO
+    & raiseUnder @(Error QuitGame)
     & runPlayerIOAsConsoleUI
-    & runGame startingState
+    & handleQuitGame
+    & fmap fst . runState startingState
     & (=<<) printEndgameResult
     & handleIndexError
     & raiseUnder @(Embed (InputT IO))

@@ -124,18 +124,20 @@ getInputCommandFromConsoleIO = runInputSem go
         Left e -> writeln (errorBundlePretty e) >> go
         Right command -> pure command
 
+data QuitGame = QuitGame
+
 -- | interpreting a command returns the turn that the command produces if it
 -- is one and otherwise executes the command in the effect context
 interpretCommand ::
-  Throws '[GameOver] r =>
+  Throws '[QuitGame] r =>
   Command ->
   Sem r RawTurn
 interpretCommand = \case
-  Quit -> throw GameOver
+  Quit -> throw QuitGame
   TakeTurn t -> pure t
 
 runPlayerIOAsConsoleUI ::
-  Members [ConsoleIO, Error GameOver] r =>
+  Members [ConsoleIO, Error QuitGame] r =>
   Sem (PlayerIO : r) a ->
   Sem r a
 runPlayerIOAsConsoleUI =
@@ -152,5 +154,5 @@ runPlayerIOAsConsoleUI =
     . raiseUnder @(Input RawTurn)
     . raiseUnder @(Output (Player', Information))
     -- final effects we want to interpret in terms of
-    . raiseUnder @(Error GameOver)
+    . raiseUnder @(Error QuitGame)
     . raiseUnder @ConsoleIO
