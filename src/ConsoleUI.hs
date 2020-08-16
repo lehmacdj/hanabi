@@ -14,7 +14,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 data PError
   = OutOfBoundsNumber Int
-  | Other
+  | PError String
   deriving (Show, Eq, Ord)
 
 instance ShowErrorComponent PError where
