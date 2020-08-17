@@ -24,6 +24,7 @@ module MyPrelude
     rightToMaybe,
     bshow,
     blshow,
+    runInputChan,
   )
 where
 
@@ -134,3 +135,10 @@ bshow = fromString . show
 -- | ByteString lazy show
 blshow :: Show a => a -> LByteString
 blshow = fromString . show
+
+-- | Interpret an input as reading from the specified channel.
+-- Warning: this can cause input to throw 'BlockedIndefinitelyOnMVar' when the
+-- channel is empty and no other thread holds reference to it.
+-- See also: documentation for 'readChan'
+runInputChan :: Member (Embed IO) r => Chan i -> Sem (Input i : r) a -> Sem r a
+runInputChan inChan = runInputSem $ embed @IO (readChan inChan)
