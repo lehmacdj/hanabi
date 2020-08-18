@@ -92,7 +92,8 @@ hanabiApi ::
     [ Embed IO,
       KVStore UUID Player,
       KVStore HGID LobbyState,
-      Error ServerError
+      Error ServerError,
+      Input (Chan GError)
     ]
     r =>
   HanabiApi (AsServerT (Sem r))
@@ -104,7 +105,7 @@ hanabiApi =
 
 data InProgressState = InProgressState
   { gameState :: IORef GameState,
-    actionInput :: Chan RawAction,
+    actionInput :: Chan RawTurn,
     gameThread :: ThreadId
   }
   deriving (Generic)
@@ -181,23 +182,64 @@ badPlayerCount playerCount =
           <> ". The number of players must be between 3 and 5."
     }
 
+data GError
+  = InvalidCard HGID
+  | GError HGID String
+
+hgidOfGError :: Lens' GError HGID
+hgidOfGError = lens get (flip set)
+  where
+    get = \case
+      InvalidCard hgid -> hgid
+      GError hgid _ -> hgid
+    set hgid = \case
+      InvalidCard _ -> InvalidCard hgid
+      GError _ errMsg -> GError hgid errMsg
+
+-- | TODO: add global logging for stuff like turns being taken etc.
+-- two approaches:
+-- 1. add record of game to game state itself
+-- 2. add a global logger that absorbs this info and writes to console or
+--    something in the cloud
 runGameThread ::
+  HGID ->
+  -- | The channel for exceptions that failed
+  Chan GError ->
+  -- | The GameState to be accessed atomically
   IORef GameState ->
-  Chan RawAction ->
+  -- | Channel for providing RawAction to this game from player input
+  Chan RawTurn ->
   Sem
     [ Output Turn,
       PlayerIO,
-      Error GameOver,
       State GameState,
-      Error CardDoesNotExist
+      Error CardDoesNotExist,
+      Embed IO
     ]
-    Void ->
+    () ->
   IO ()
-runGameThread = undefined
+runGameThread hgid errChan stateIORef turnChan game =
+  game
+    & ignoreOutput @Turn
+    & raiseUnder @(Input RawTurn)
+    & raiseUnder @(Output (Player', Information))
+    & runPlayerIOToInputOutput
+    & ignoreOutput @(Player', Information)
+    & runInputChan turnChan
+    & runStateIORef stateIORef
+    & raiseUnder @(Error GError)
+    & runErrorChan errChan . mapError (\_ -> InvalidCard hgid)
+    & runM
 
 startGame ::
   forall r.
-  Members [Embed IO, KVStore HGID LobbyState, Error ServerError] r =>
+  Members
+    [ Embed IO,
+      Input (Chan GError),
+      KVStore HGID LobbyState,
+      Error ServerError
+    ]
+    r =>
   HGID ->
   Sem r NoContent
 startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
@@ -210,9 +252,12 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
         unless validPlayerCount $ throw (badPlayerCount playerCount)
         startingState <- embed @IO $ sample (startingState players)
         stateIORef <- embed @IO $ newIORef startingState
-        chan <- newChan
-        threadId <- embed $ forkIO (runGameThread stateIORef chan fullGameLoop)
-        let inProgressState = InProgressState stateIORef chan threadId
+        turnChan <- newChan
+        gerrorChan <- input @(Chan GError)
+        threadId <-
+          embed . forkIO $
+            runGameThread hgid gerrorChan stateIORef turnChan fullGameLoop
+        let inProgressState = InProgressState stateIORef turnChan threadId
         writeKV hgid (InProgress inProgressState)
       -- TODO: possibly allow starting game from completed game, i.e. with same
       -- players
@@ -230,7 +275,8 @@ hanabiGameApi ::
     [ Embed IO,
       KVStore UUID Player,
       KVStore HGID LobbyState,
-      Error ServerError
+      Error ServerError,
+      Input (Chan GError)
     ]
     r =>
   Player ->
