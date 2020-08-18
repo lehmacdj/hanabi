@@ -13,6 +13,7 @@ module MyPrelude
     next,
     untilJust,
     whenJust,
+    whenLeft,
     setExcept,
     setAny,
     codiagonal,
@@ -25,6 +26,7 @@ module MyPrelude
     bshow,
     blshow,
     runInputChan,
+    runErrorChan,
   )
 where
 
@@ -79,6 +81,9 @@ untilJust m = go
 -- | taken from: extra
 whenJust :: Applicative m => Maybe a -> (a -> m ()) -> m ()
 whenJust mg f = maybe (pure ()) f mg
+
+whenLeft :: Applicative m => Either a () -> (a -> m ()) -> m ()
+whenLeft e f = either f (const (pure ())) e
 
 setExcept :: (Enum a, Bounded a, Ord a) => a -> Set a
 setExcept x = setAny `difference` singleton x
@@ -141,4 +146,12 @@ blshow = fromString . show
 -- channel is empty and no other thread holds reference to it.
 -- See also: documentation for 'readChan'
 runInputChan :: Member (Embed IO) r => Chan i -> Sem (Input i : r) a -> Sem r a
-runInputChan inChan = runInputSem $ embed @IO (readChan inChan)
+runInputChan inChan = runInputSem $ readChan inChan
+
+-- | Output an error into a channel. Suspect to exceptions that can be thrown by
+runErrorChan ::
+  Member (Embed IO) r =>
+  Chan e ->
+  Sem (Error e : r) () ->
+  Sem r ()
+runErrorChan errChan = runError >=> flip whenLeft (writeChan errChan)
