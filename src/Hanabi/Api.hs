@@ -173,6 +173,10 @@ gameAlreadyStartedCannot :: LByteString -> ServerError
 gameAlreadyStartedCannot action =
   err400 {errBody = "Game has already started. Can't " <> action <> " game."}
 
+gameMustBeInProgressTo :: LByteString -> ServerError
+gameMustBeInProgressTo action =
+  err400 {errBody = "Game must be in progress to " <> action <> "game."}
+
 badPlayerCount :: Int -> ServerError
 badPlayerCount playerCount =
   err400
@@ -269,6 +273,31 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
 --   HGID ->
 --   _
 -- subscribeToState = undefined
+--
+
+doAct ::
+  forall r.
+  Members
+    [ Embed IO,
+      KVStore UUID Player,
+      KVStore HGID LobbyState,
+      Error ServerError,
+      Input (Chan GError)
+    ]
+    r =>
+  Player ->
+  HGID ->
+  RawAction ->
+  Sem r NoContent
+doAct player hgid action = inputAction <$> lookupOrThrowKV badGame hgid $> NoContent
+  where
+    inputAction :: LobbyState -> Sem r ()
+    inputAction = \case
+      InProgress state ->
+        writeChan
+          (view #actionInput state)
+          (RawTurn player action)
+      _ -> throw (gameMustBeInProgressTo "perform an action")
 
 hanabiGameApi ::
   Members
@@ -288,5 +317,5 @@ hanabiGameApi player gameId =
       playersGet = getPlayers gameId,
       start = startGame gameId,
       connect = undefined,
-      act = undefined
+      act = doAct player gameId
     }
