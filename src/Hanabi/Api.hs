@@ -1,11 +1,13 @@
 module Hanabi.Api where
 
 import Control.Concurrent (ThreadId, forkIO)
+import Data.Aeson
 import Data.Random
 import Data.UUID
 import Game
 import HGID
 import MyPrelude
+import qualified Network.WebSockets as WebSocket
 import Player
 import Polysemy.Error
 import Polysemy.Input
@@ -14,7 +16,7 @@ import Polysemy.Output
 import Polysemy.State
 import Servant.API
 import Servant.API.Generic
-import Servant.API.WebSocketConduit
+import Servant.API.WebSocket
 import Servant.Server
 import Servant.Server.Generic
 
@@ -64,7 +66,7 @@ data HanabiGameApi route = HanabiGameApi
              "creates a websocket that receives state updates"
         :> "state"
         :> "subscribe"
-        :> WebSocketSource Information,
+        :> WebSocket,
     act ::
       route
         :- Summary "perform an action in the hanabi game"
@@ -102,6 +104,14 @@ hanabiApi =
     { createGuest = createGuestUser,
       gameApi = \p gid -> toServant (hanabiGameApi p gid)
     }
+
+-- | State needed for every connection from a client subscribing to updates
+data StateSubscriber = StateSubscriber
+  { stateSubscriberThread :: ThreadId,
+    -- | Channel for information to pass to the player
+    infoChan :: Chan Information
+  }
+  deriving (Generic)
 
 data InProgressState = InProgressState
   { gameState :: IORef GameState,
@@ -267,13 +277,25 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
       -- players
       _ -> throw (gameAlreadyStartedCannot "start")
 
--- subscribeToState ::
---   Members [RandomFu, KVStore HGID LobbyState, Error ServerError] r =>
---   Player ->
---   HGID ->
---   _
--- subscribeToState = undefined
---
+writeWebSocket :: ToJSON a => WebSocket.Connection -> a -> IO ()
+writeWebSocket connection value =
+  WebSocket.sendDataMessage connection (WebSocket.Text (encode value) Nothing)
+
+-- | The thread that sends information to the client on reading it from its
+-- channel
+stateSender :: Chan Information -> WebSocket.Connection -> IO ()
+stateSender infoChan connection = do
+  info <- readChan infoChan
+  writeWebSocket connection info
+  stateSender infoChan connection
+
+subscribeToState ::
+  Members [Embed IO, KVStore HGID LobbyState, Error ServerError] r =>
+  Player ->
+  HGID ->
+  WebSocket.Connection ->
+  Sem r ()
+subscribeToState = undefined
 
 doAct ::
   forall r.

@@ -10,6 +10,7 @@ where
 
 -- @concurrency: TODO: replace State with AtomicState
 
+import qualified Data.Aeson as Aeson
 import Data.Coerce (coerce)
 import Data.Generics.Labels ()
 import Data.Random
@@ -78,6 +79,13 @@ instance Bounded Number where
   minBound = Number ($$(refineTH 1) :: Refined IsNumber Int)
   maxBound = Number ($$(refineTH 5) :: Refined IsNumber Int)
 
+instance Aeson.FromJSON Number where
+  parseJSON = Aeson.parseJSON >=> refineFail >=> pure . Number
+
+instance Aeson.ToJSON Number where
+  toJSON = Aeson.toJSON . unrefine . unNumber
+  toEncoding = Aeson.toEncoding . unrefine . unNumber
+
 -- | Needed for Enum/Bounded instance for card
 numberCount :: Int
 numberCount = length [minBound :: Number .. maxBound]
@@ -119,6 +127,11 @@ instance Read Color where
     | s == "Y" = [(Yellow, "")]
     | s == "W" = [(White, "")]
     | otherwise = []
+
+instance Aeson.FromJSON Color
+
+instance Aeson.ToJSON Color where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
 
 -- | needed for Enum Card instance + Bounded Instance
 colorCount :: Int
@@ -323,6 +336,11 @@ players' = #players . coerced
 newtype Player' = UnsafeMkPlayer' {rawPlayer :: Player}
   deriving (Show, Eq, Ord, Generic)
 
+instance Aeson.FromJSON Player'
+
+instance Aeson.ToJSON Player' where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
+
 validatePlayer :: GameState -> Player -> Maybe Player'
 validatePlayer state player
   | anyOf (#players . traverse) (== player) state = Just (UnsafeMkPlayer' player)
@@ -372,6 +390,11 @@ instance Semigroup CardPossibilities where
 instance Monoid CardPossibilities where
   mempty = CardPossibilities setAny setAny
 
+instance Aeson.FromJSON CardPossibilities
+
+instance Aeson.ToJSON CardPossibilities where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
+
 cardIs :: Card -> CardPossibilities
 cardIs c = CardPossibilities color number
   where
@@ -397,6 +420,11 @@ data Information
   = RemovedFromHand Player' CardIx
   | CardSatisfies Player' CardIx CardPossibilities
   deriving (Show, Generic)
+
+instance Aeson.FromJSON Information
+
+instance Aeson.ToJSON Information where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
 
 aboutPlayer :: Lens' Information Player'
 aboutPlayer = lens get set

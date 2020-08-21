@@ -5,6 +5,7 @@ module Player
   )
 where
 
+import qualified Data.Aeson as Aeson
 import Data.Random
 import Data.UUID
 import MyPrelude
@@ -20,6 +21,11 @@ data Player = Player
     identifier :: UUID
   }
   deriving (Show, Generic, Eq, Ord)
+
+instance Aeson.FromJSON Player
+
+instance Aeson.ToJSON Player where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
 
 simplePlayer :: String -> Player
 simplePlayer n = Player n nil
