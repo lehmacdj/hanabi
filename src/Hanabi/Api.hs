@@ -284,10 +284,12 @@ writeWebSocket connection value =
 -- | The thread that sends information to the client on reading it from its
 -- channel
 stateSender :: Chan Information -> WebSocket.Connection -> IO ()
-stateSender infoChan connection = do
-  info <- readChan infoChan
-  writeWebSocket connection info
-  stateSender infoChan connection
+stateSender infoChan connection = go
+  where
+    go = do
+      info <- readChan infoChan
+      writeWebSocket connection info
+      go
 
 subscribeToState ::
   Members [Embed IO, KVStore HGID LobbyState, Error ServerError] r =>
