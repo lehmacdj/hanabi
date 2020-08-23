@@ -1,6 +1,7 @@
 module Hanabi.Api where
 
 import Control.Concurrent (ThreadId, forkIO)
+import Control.Lens ((<>~))
 import Data.Aeson
 import Data.Random
 import Data.UUID
@@ -115,8 +116,14 @@ data StateSubscriber = StateSubscriber
 
 data InProgressState = InProgressState
   { gameState :: IORef GameState,
+    -- | write channel for sending turns into. The turns are consumed by the
+    -- game thread
     actionInput :: Chan RawTurn,
-    gameThread :: ThreadId
+    gameThread :: ThreadId,
+    -- | List of consumers that have subscribed to the state
+    subscribers :: [StateSubscriber],
+    -- | Channel to be dupped for creating new StateSubscribers.
+    prototypeInfoChan :: Chan Information
   }
   deriving (Generic)
 
@@ -223,6 +230,8 @@ runGameThread ::
   IORef GameState ->
   -- | Channel for providing RawAction to this game from player input
   Chan RawTurn ->
+  -- | Channel for writing information to
+  Chan Information ->
   Sem
     [ Output Turn,
       PlayerIO,
@@ -232,7 +241,7 @@ runGameThread ::
     ]
     () ->
   IO ()
-runGameThread hgid errChan stateIORef turnChan game =
+runGameThread hgid errChan stateIORef turnChan _ game =
   game
     & ignoreOutput @Turn
     & raiseUnder @(Input RawTurn)
@@ -245,6 +254,8 @@ runGameThread hgid errChan stateIORef turnChan game =
     & runErrorChan errChan . mapError (\_ -> InvalidCard hgid)
     & runM
 
+-- | TODO: cleanup threads once they die; this will probably require switching
+-- to Async instead of forkIO
 startGame ::
   forall r.
   Members
@@ -256,7 +267,7 @@ startGame ::
     r =>
   HGID ->
   Sem r NoContent
-startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
+startGame hgid = (lookupOrThrowKV badGame hgid >>= doStart) $> NoContent
   where
     doStart :: LobbyState -> Sem r ()
     doStart = \case
@@ -267,11 +278,23 @@ startGame hgid = doStart <$> lookupOrThrowKV badGame hgid $> NoContent
         startingState <- embed @IO $ sample (startingState players)
         stateIORef <- embed @IO $ newIORef startingState
         turnChan <- newChan
+        infoChan <- newChan
+        -- we need this thread to avoid building up
+        -- stuff on this channel forever, honestly this is probably a premature
+        -- optimization and maybe we shouldn't be doing it
+        -- TODO: cleanup this thread when the game ends
+        _ <- embed . forkIO $ forever (readChan infoChan $> ())
         gerrorChan <- input @(Chan GError)
         threadId <-
           embed . forkIO $
-            runGameThread hgid gerrorChan stateIORef turnChan fullGameLoop
-        let inProgressState = InProgressState stateIORef turnChan threadId
+            runGameThread
+              hgid
+              gerrorChan
+              stateIORef
+              turnChan
+              infoChan
+              fullGameLoop
+        let inProgressState = InProgressState stateIORef turnChan threadId [] infoChan
         writeKV hgid (InProgress inProgressState)
       -- TODO: possibly allow starting game from completed game, i.e. with same
       -- players
@@ -283,21 +306,35 @@ writeWebSocket connection value =
 
 -- | The thread that sends information to the client on reading it from its
 -- channel
-stateSender :: Chan Information -> WebSocket.Connection -> IO ()
-stateSender infoChan connection = go
-  where
-    go = do
-      info <- readChan infoChan
-      writeWebSocket connection info
-      go
+-- TODO: handle websocket closed exceptions, this probably requires spawning an
+-- async task that listens for messages and ignores any that aren't a
+-- CloseRequest. Documentation for websockets package could also use an update
+-- with information on what best error handling practices are once I take the
+-- time to figure this out
+stateSender :: Player -> Chan Information -> WebSocket.Connection -> IO ()
+stateSender _ infoChan connection = forever $ do
+  info <- readChan infoChan
+  writeWebSocket connection info
 
 subscribeToState ::
+  forall r.
   Members [Embed IO, KVStore HGID LobbyState, Error ServerError] r =>
   Player ->
   HGID ->
   WebSocket.Connection ->
   Sem r ()
-subscribeToState = undefined
+subscribeToState p hgid connection =
+  lookupOrThrowKV badGame hgid >>= spawnSubscriber
+  where
+    spawnSubscriber :: LobbyState -> Sem r ()
+    spawnSubscriber = \case
+      InProgress state -> do
+        infoChan <- dupChan (view #prototypeInfoChan state)
+        -- TODO: cleanup thread eventually
+        threadId <- embed @IO $ forkIO (stateSender p infoChan connection)
+        writeKV hgid . InProgress $
+          state & #subscribers <>~ [StateSubscriber threadId infoChan]
+      _ -> throw $ gameMustBeInProgressTo "subscribe to state updates"
 
 doAct ::
   forall r.
@@ -313,7 +350,8 @@ doAct ::
   HGID ->
   RawAction ->
   Sem r NoContent
-doAct player hgid action = inputAction <$> lookupOrThrowKV badGame hgid $> NoContent
+doAct player hgid action =
+  (lookupOrThrowKV badGame hgid >>= inputAction) $> NoContent
   where
     inputAction :: LobbyState -> Sem r ()
     inputAction = \case
@@ -340,6 +378,6 @@ hanabiGameApi player gameId =
     { join = joinGame player gameId,
       playersGet = getPlayers gameId,
       start = startGame gameId,
-      connect = undefined,
+      connect = subscribeToState player gameId,
       act = doAct player gameId
     }
