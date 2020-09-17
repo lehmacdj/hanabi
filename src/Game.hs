@@ -353,11 +353,21 @@ data Hint
 
 makePrisms ''Hint
 
+instance Aeson.FromJSON Hint
+
+instance Aeson.ToJSON Hint where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
+
 data RawAction
   = RawPlay CardIx
   | RawDiscard CardIx
   | RawHint Player Hint
   deriving (Show, Eq, Generic)
+
+instance Aeson.FromJSON RawAction
+
+instance Aeson.ToJSON RawAction where
+  toEncoding = Aeson.genericToEncoding Aeson.defaultOptions
 
 data Action
   = Play CardIx
